@@ -27,6 +27,8 @@ SETTINGS_BOOLS = (
     "v2_mode",
     "disable_sensor_graph",
     "invert_cover",
+    "hide_unavailable_entities",
+    "home_redirect_enabled",
 )
 SETTINGS_FILE = "dwains-dashboard/configs/settings.yaml"
 
@@ -73,6 +75,10 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             header = {key: bool(user_input.get(key, False)) for key in SETTINGS_BOOLS}
             header["weather_entity"] = user_input.get("weather_entity", "") or ""
             header["alarm_entity"] = user_input.get("alarm_entity", "") or ""
+            target = (user_input.get("home_redirect_target", "/dwains-dashboard/home") or "/dwains-dashboard/home").strip()
+            if not target.startswith("/"):
+                target = f"/{target}"
+            header["home_redirect_target"] = target
             await self.hass.async_add_executor_job(_write_settings, path, header)
             self.hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
 
@@ -101,6 +107,9 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             vol.Optional("v2_mode", default=bool(cur.get("v2_mode", False))): selector.BooleanSelector(),
             vol.Optional("disable_sensor_graph", default=bool(cur.get("disable_sensor_graph", False))): selector.BooleanSelector(),
             vol.Optional("invert_cover", default=bool(cur.get("invert_cover", False))): selector.BooleanSelector(),
+            vol.Optional("hide_unavailable_entities", default=bool(cur.get("hide_unavailable_entities", False))): selector.BooleanSelector(),
+            vol.Optional("home_redirect_enabled", default=bool(cur.get("home_redirect_enabled", False))): selector.BooleanSelector(),
+            vol.Optional("home_redirect_target", default=(cur.get("home_redirect_target", "/dwains-dashboard/home") or "/dwains-dashboard/home")): str,
             vol.Optional("weather_entity", default=entity_default("weather_entity")): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="weather")
             ),

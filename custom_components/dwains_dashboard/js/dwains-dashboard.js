@@ -131,6 +131,79 @@
     }
   };
 
+  // Configurable fallback redirect for HA SPA route jumps (/home* -> custom target)
+  (() => {
+    if (window.__dd_home_redirect_installed) return;
+    window.__dd_home_redirect_installed = true;
+
+    const KEY_ENABLED = "dwains_dashboard_home_redirect_enabled";
+    const KEY_TARGET = "dwains_dashboard_home_redirect_target";
+    const DEFAULT_TARGET = "/dwains-dashboard/home";
+
+    const normalizeTarget = (v) => {
+      if (typeof v !== "string") return DEFAULT_TARGET;
+      const t = v.trim();
+      if (!t) return DEFAULT_TARGET;
+      return t.startsWith("/") ? t : `/${t}`;
+    };
+
+    window.__dd_get_home_redirect_cfg = function() {
+      const cfg = window.__dd_home_redirect_cfg || {};
+      let enabled = cfg.enabled;
+      if (typeof enabled !== "boolean") {
+        try { enabled = localStorage.getItem(KEY_ENABLED) === "true"; } catch (_) { enabled = false; }
+      }
+      let target = cfg.target;
+      if (typeof target !== "string" || !target.trim()) {
+        try { target = localStorage.getItem(KEY_TARGET) || DEFAULT_TARGET; } catch (_) { target = DEFAULT_TARGET; }
+      }
+      return { enabled: !!enabled, target: normalizeTarget(target) };
+    };
+
+    const shouldRedirectPath = (p) =>
+      p === "/" || p === "/home" || p === "/home/" || p.startsWith("/home/overview");
+
+    const fix = () => {
+      const cfg = window.__dd_get_home_redirect_cfg ? window.__dd_get_home_redirect_cfg() : { enabled: false, target: DEFAULT_TARGET };
+      if (!cfg.enabled) return;
+      const p = window.location.pathname || "";
+      const t = normalizeTarget(cfg.target);
+      if (!shouldRedirectPath(p)) return;
+      if (p === t || p === `${t}/`) return;
+      history.replaceState(history.state || null, "", t + (window.location.hash || ""));
+      setTimeout(() => {
+        try { window.dispatchEvent(new Event("location-changed", { bubbles: true, composed: true })); } catch (_) {}
+      }, 0);
+    };
+
+    window.__dd_refresh_home_redirect_cfg = async function() {
+      try {
+        const getHass = window.__dd_get_hass || (() => undefined);
+        let hass = getHass();
+        for (let i = 0; !hass && i < 30; i++) {
+          await new Promise((r) => setTimeout(r, 200));
+          hass = getHass();
+        }
+        if (!hass || typeof hass.callWS !== "function") return;
+        const cfg = await hass.callWS({ type: "dwains_dashboard/configuration/get" });
+        const hh = cfg && cfg.homepage_header ? cfg.homepage_header : {};
+        const enabled = hh.home_redirect_enabled ?? hh.homeRedirectEnabled;
+        const target = hh.home_redirect_target ?? hh.homeRedirectTarget;
+        window.__dd_home_redirect_cfg = {
+          enabled: !!enabled,
+          target: normalizeTarget(typeof target === "string" ? target : DEFAULT_TARGET)
+        };
+        fix();
+      } catch (_) {}
+    };
+
+    fix();
+    window.addEventListener("location-changed", fix);
+    window.addEventListener("popstate", fix);
+    setTimeout(fix, 1200);
+    try { window.__dd_refresh_home_redirect_cfg && window.__dd_refresh_home_redirect_cfg(); } catch (_) {}
+  })();
+
   // Reliable loader for card helpers with retries/backoff
   if (!window.__dd_wait_card_helpers) window.__dd_wait_card_helpers = async function(maxTries = 20) {
     for (let i = 0; i < maxTries; i++) {
@@ -3784,38 +3857,49 @@
             </div>
           `
           }
+          _hideUnavailableEntitiesEnabled() {
+            return !!(this.configuration && this.configuration.homepage_header && void 0 !== this.configuration.homepage_header.hide_unavailable_entities && this.configuration.homepage_header.hide_unavailable_entities)
+          }
+          _filterUnavailableCards(e) {
+            if (this.deviceViewEditMode || !this._hideUnavailableEntitiesEnabled()) return e;
+            return e.filter((e => {
+              const t = this._hass.states[e.entity];
+              return !(t && "unavailable" === t.state)
+            }))
+          }
           _renderDeviceViewCards(e) {
+            const t = this._filterUnavailableCards(e.cards);
             if (this.deviceViewDisplayGrouped && "person" != e.domain && "weather" != e.domain && "alarm_control_panel" != e.domain) {
-              let t = e.cards.reduce(((e, t) => (e[t.area.area_id] = [...e[t.area.area_id] || [], t], e)), {}),
-                i = Object.keys(t).sort(((e, t) => {
+              let i = t.reduce(((e, t) => (e[t.area.area_id] = [...e[t.area.area_id] || [], t], e)), {}),
+                a = Object.keys(i).sort(((e, t) => {
                   let i = this.configuration.areas[e] && this.configuration.areas[e].sort_order ? this.configuration.areas[e] : 1,
                     a = this.configuration.areas[t] && this.configuration.areas[t].sort_order ? this.configuration.areas[t] : 1;
                   return i == a ? 0 : i > a ? 1 : -1
                 }));
-              return e.cards.sort((function(e, t) {
+              return t.sort((function(e, t) {
                 let i = e.grouped_sort_order,
                   a = t.grouped_sort_order;
                 return i == a ? 0 : i > a ? 1 : -1
               })), c.qy`
             <div>
-            ${i.map((e=>c.qy`
+            ${a.map((e=>c.qy`
                 <div class="mb-5">
-                  <h3 class="font-semibold capitalize text-gray">${t[e][0].area.name}</h3>
+                  <h3 class="font-semibold capitalize text-gray">${i[e][0].area.name}</h3>
                   <div class="grid grid-flow-row-dense grid-cols-2 lg-grid-cols-3 xl-grid-cols-4 gap-4 sortable">
-                  ${Object.entries(t[e]).map((([e,t])=>c.qy`${this._renderDeviceViewCard(t)}`))}
+                  ${Object.entries(i[e]).map((([e,t])=>c.qy`${this._renderDeviceViewCard(t)}`))}
                   </div>
                 </div>
               `))}
             </div>
             `
             }
-            return e.cards.sort((function(e, t) {
+            return t.sort((function(e, t) {
               let i = e.sort_order,
                 a = t.sort_order;
               return i == a ? 0 : i > a ? 1 : -1
             })), c.qy`
             <div class="grid grid-flow-row-dense grid-cols-2 lg-grid-cols-3 xl-grid-cols-4 gap-4 sortable">
-              ${e.cards.map((e=>c.qy`${this._renderDeviceViewCard(e)}`))}
+              ${t.map((e=>c.qy`${this._renderDeviceViewCard(e)}`))}
             </div>
             `
           }
@@ -9278,38 +9362,49 @@
       </div>
       `
           }
+          _hideUnavailableEntitiesEnabled() {
+            return !!(this.configuration && this.configuration.homepage_header && void 0 !== this.configuration.homepage_header.hide_unavailable_entities && this.configuration.homepage_header.hide_unavailable_entities)
+          }
+          _filterUnavailableCards(e) {
+            if (this.areaViewEditMode || this.favoriteEditMode || !this._hideUnavailableEntitiesEnabled()) return e;
+            return e.filter((e => {
+              const t = this._hass.states[e.entity];
+              return !(t && "unavailable" === t.state)
+            }))
+          }
           _renderAreaViewCards(e) {
+            const t = this._filterUnavailableCards(e.cards);
             if (this.areaViewDisplayGrouped) {
-              let t = e.cards.reduce(((e, t) => (e[t.domain] = [...e[t.domain] || [], t], e)), {}),
-                i = Object.keys(t).sort(((e, t) => {
+              let i = t.reduce(((e, t) => (e[t.domain] = [...e[t.domain] || [], t], e)), {}),
+                a = Object.keys(i).sort(((e, t) => {
                   let i = this.configuration.devices[e] && this.configuration.devices[e].sort_order ? this.configuration.devices[e].sort_order : 99,
                     a = this.configuration.devices[t] && this.configuration.devices[t].sort_order ? this.configuration.devices[t].sort_order : 99;
                   return i == a ? 0 : i > a ? 1 : -1
                 }));
-              return e.cards.sort((function(e, t) {
+              return t.sort((function(e, t) {
                 let i = e.grouped_sort_order,
                   a = t.grouped_sort_order;
                 return i == a ? 0 : i > a ? 1 : -1
               })), r.qy`
         <div>
-        ${i.map((e=>r.qy`
+        ${a.map((e=>r.qy`
             <div class="mb-5">
               <h3 class="font-semibold capitalize text-gray">${(0,p.A)(this._hass,"device."+e)}</h3>
               <div class="grid grid-flow-row-dense grid-cols-2 lg-grid-cols-3 xl-grid-cols-4 gap-4 sortable">
-                ${Object.entries(t[e]).map((([e,t])=>r.qy`${this._renderAreaViewCard(t)}`))}
+                ${Object.entries(i[e]).map((([e,t])=>r.qy`${this._renderAreaViewCard(t)}`))}
               </div>
             </div>
           `))}
         </div>
         `
             }
-            return e.cards.sort((function(e, t) {
+            return t.sort((function(e, t) {
               let i = e.sort_order,
                 a = t.sort_order;
               return i == a ? 0 : i > a ? 1 : -1
             })), r.qy`
         <div class="grid grid-flow-row-dense grid-cols-2 lg-grid-cols-3 xl-grid-cols-4 gap-4 sortable">
-          ${e.cards.map((e=>r.qy`${this._renderAreaViewCard(e)}`))}
+          ${t.map((e=>r.qy`${this._renderAreaViewCard(e)}`))}
         </div>
         `
           }
@@ -10587,10 +10682,11 @@
                   new Set;
                   for (const e of this.devices) e.area_id === t.area_id && i.add(e.id);
                   for (const a of this.entities)
-                    if (a.area_id ? a.area_id === t.area_id : i.has(a.device_id)) {
+                    if (!(a.hidden_by) && (a.area_id ? a.area_id === t.area_id : i.has(a.device_id))) {
                       const i = !!this.configuration.entities[a.entity_id] && !!this.configuration.entities[a.entity_id].disabled,
-                        n = !!this.configuration.entities[a.entity_id] && !!this.configuration.entities[a.entity_id].excluded;
-                      if (!i && !n) {
+                        n = !!this.configuration.entities[a.entity_id] && !!this.configuration.entities[a.entity_id].excluded,
+                        o = !!this.configuration.entities[a.entity_id] && !!this.configuration.entities[a.entity_id].hidden;
+                      if (!i && !n && !o) {
                         const i = this.configuration.entities[a.entity_id] ? this.configuration.entities[a.entity_id].friendly_name : "",
                           n = (0, r.mD)(a.entity_id);
                         if (!(l.Zz.includes(n) || l.Ti.includes(n) || l.K5.includes(n) || l.ge.includes(n) || l.R9.includes(n))) continue;
@@ -10612,24 +10708,30 @@
             else {
               const t = e.currentTarget.domain,
                 i = e.currentTarget.deviceClass;
+              const a = this.domains && this.domains[t] && Array.isArray(this.domains[t].entities) ? this.domains[t].entities : [];
+              const n = t === "climate" && a.length ? a : t === "climate" ? Object.keys(this._hass.states).filter((e) => e.startsWith("climate.")).map((e) => ({
+                entity_id: e,
+                area: "",
+                friendlyName: (this._hass.states[e] && this._hass.states[e].attributes && this._hass.states[e].attributes.friendly_name) || e
+              })) : a;
               window.setTimeout((() => {
                 (0, s.r)("hass-more-info", {
                   entityId: ""
                 }, document.querySelector("home-assistant")), (0, o.d)((0, d.A)(this._hass, "device." + t), {
                   type: "custom:dwains-house-information-more-info-card",
                   domain: t,
-                  entities: t === "climate" ? Object.keys(this._hass.states).filter((e) => e.startsWith("climate.")).map((e) => ({
-                    entity_id: e,
-                    area: "",
-                    friendlyName: (this._hass.states[e] && this._hass.states[e].attributes && this._hass.states[e].attributes.friendly_name) || e
-                  })) : this.domains[t].entities,
+                  entities: n,
                   deviceClass: t === "climate" ? "" : i
                 }, !0, "")
               }), 50)
             }
           }
           _isOn(e, t, i) {
-            if (e) return (i ? e.filter((e => e.attributes.device_class === i)) : e).filter((e => !l.s7.includes(e.state) && !l.jj.includes(e.state))).length
+            if (e) return (i ? e.filter((e => e.attributes.device_class === i)) : e).filter((e => {
+              const t = e.entity_id,
+                i = this.configuration && this.configuration.entities && this.configuration.entities[t] ? this.configuration.entities[t] : null;
+              return !(e.hidden_by || i && i.disabled || i && i.excluded || i && i.hidden || l.s7.includes(e.state) || l.jj.includes(e.state))
+            })).length
           }
           _isOnCover(e, t, i) {
             if (e) return (i ? e.filter((e => e.attributes.device_class === i)) : e).filter((e => !l.s7.includes(e.state) && !l.jj.includes(e.state) && !this.configuration.homepage_header.invert_cover)).length

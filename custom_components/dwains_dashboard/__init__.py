@@ -571,6 +571,9 @@ async def ws_handle_edit_area_bool_value(
         vol.Optional("weatherEntity"): str,
         vol.Optional("invertCover"): bool,
         vol.Optional("alarmEntity"): str,
+        vol.Optional("hideUnavailableEntities"): bool,
+        vol.Optional("homeRedirectEnabled"): bool,
+        vol.Optional("homeRedirectTarget"): str,
 
     }
 )
@@ -588,6 +591,12 @@ async def ws_handle_edit_homepage_header(
     else:
         homepage_header = OrderedDict()
 
+    hide_unavailable = msg.get("hideUnavailableEntities", homepage_header.get("hide_unavailable_entities", False))
+    if isinstance(hide_unavailable, str):
+        hide_unavailable = hide_unavailable.strip().lower() == "true"
+    home_redirect_enabled = msg.get("homeRedirectEnabled", homepage_header.get("home_redirect_enabled", False))
+    home_redirect_target = msg.get("homeRedirectTarget", homepage_header.get("home_redirect_target", "/dwains-dashboard/home"))
+
     homepage_header.update({
         "disable_clock": msg["disableClock"],
         "am_pm_clock": msg["amPmClock"],
@@ -597,6 +606,9 @@ async def ws_handle_edit_homepage_header(
         "invert_cover": msg["invertCover"],
         "weather_entity": msg["weatherEntity"],
         "alarm_entity": msg["alarmEntity"],
+        "hide_unavailable_entities": hide_unavailable,
+        "home_redirect_enabled": bool(home_redirect_enabled),
+        "home_redirect_target": str(home_redirect_target),
     })
 
     if not os.path.exists(hass.config.path("dwains-dashboard/configs")):

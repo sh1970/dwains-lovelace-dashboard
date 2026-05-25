@@ -30,7 +30,10 @@
           "disable_sensor_graph": "Disable sensor graph",
           "invert_cover": "Invert cover state",
           "weather_entity": "Weather entity",
-          "alarm_entity": "Alarm entity"
+          "alarm_entity": "Alarm entity",
+          "hide_unavailable_entities": "Hide unavailable entities",
+          "home_redirect_enabled": "Enable home redirect",
+          "home_redirect_target": "Home redirect target URL"
         }
       }
     }
