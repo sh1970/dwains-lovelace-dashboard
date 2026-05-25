@@ -328,6 +328,12 @@
         // (scoped-custom-element-registry) and the bundle's define can land on a
         // stale registry -> "Custom element doesn't exist: homepage-card".
         try { (window.__dd_ctors = window.__dd_ctors || {})[name] = constructor; } catch (e) {}
+        // ALSO keep the RAW constructor (first write wins) in a separate map the
+        // preload's prototype-level capture never overwrites. The prototype patch
+        // sees the polyfill's WRAPPER class (no setConfig on its own prototype),
+        // which can't be subclassed into an upgradeable element. This instance-level
+        // override sees the real class first.
+        try { var O = (window.__dd_orig = window.__dd_orig || {}); if (!O[name]) O[name] = constructor; } catch (e) {}
         if (customElements.get(name)) return;
         try {
           return originalDefine.call(this, name, constructor, options);
@@ -2226,7 +2232,7 @@
           n = i(845);
         const o = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(o).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3)));
+          await new Promise((e => setTimeout(e, 0)));
           const e = await window.loadCardHelpers();
           class t extends n.WF {
             static get properties() {
@@ -2399,7 +2405,7 @@
           s = i(89);
         const r = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(r).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3))), await window.loadCardHelpers();
+          await new Promise((e => setTimeout(e, 0))), await window.loadCardHelpers();
           class e extends n.WF {
             static get styles() {
               return [n.AH`
@@ -4635,7 +4641,7 @@
           s = i(89);
         const r = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(r).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3))), await window.loadCardHelpers();
+          await new Promise((e => setTimeout(e, 0))), await window.loadCardHelpers();
           class e extends n.WF {
             static get styles() {
               return [n.AH`
@@ -4728,7 +4734,7 @@
           s = i(89);
         const r = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(r).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3))), await window.loadCardHelpers();
+          await new Promise((e => setTimeout(e, 0))), await window.loadCardHelpers();
           class e extends n.WF {
             static get styles() {
               return [n.AH`
@@ -4828,7 +4834,7 @@
           s = i(89);
         const r = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(r).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3))), await window.loadCardHelpers();
+          await new Promise((e => setTimeout(e, 0))), await window.loadCardHelpers();
           class e extends n.WF {
             static get styles() {
               return [n.AH`
@@ -5162,7 +5168,7 @@
           s = i(89);
         const r = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(r).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3))), await window.loadCardHelpers();
+          await new Promise((e => setTimeout(e, 0))), await window.loadCardHelpers();
           class e extends n.WF {
             static get styles() {
               return [n.AH`
@@ -5486,7 +5492,7 @@
           r = i(89);
         const l = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(l).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3))), await window.loadCardHelpers();
+          await new Promise((e => setTimeout(e, 0))), await window.loadCardHelpers();
           class e extends n.WF {
             static get styles() {
               return [n.AH`
@@ -5874,7 +5880,7 @@
           s = i(89);
         const r = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(r).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3))), await window.loadCardHelpers();
+          await new Promise((e => setTimeout(e, 0))), await window.loadCardHelpers();
           class e extends n.WF {
             static get styles() {
               return [n.AH`
@@ -6109,7 +6115,7 @@
           r = i(89);
         const l = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(l).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3))), await window.loadCardHelpers();
+          await new Promise((e => setTimeout(e, 0))), await window.loadCardHelpers();
           class e extends n.WF {
             static get styles() {
               return [n.AH`
@@ -6497,7 +6503,7 @@
           s = i(89);
         const r = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(r).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3))), await window.loadCardHelpers();
+          await new Promise((e => setTimeout(e, 0))), await window.loadCardHelpers();
           class e extends n.WF {
             static get styles() {
               return [n.AH`
@@ -7100,7 +7106,7 @@
       54: () => {
         const e = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(e).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3)));
+          await new Promise((e => setTimeout(e, 0)));
           const e = customElements.get("hui-masonry-view") ? Object.getPrototypeOf(customElements.get("hui-masonry-view")) : Object.getPrototypeOf(customElements.get("hc-lovelace")),
             t = e.prototype.html,
             i = e.prototype.css,
@@ -9787,22 +9793,10 @@
                   </div>
 
                   <div>
-                    ${this._hass.user.is_admin?r.qy`
-                      <div 
-                        class="p-1 ha-icon cursor-pointer" 
-                        .disableClock=${!!this.configuration.homepage_header.disable_clock}
-                        .amPmClock=${!!this.configuration.homepage_header.am_pm_clock}
-                        .disableWelcomeMessage=${!!this.configuration.homepage_header.disable_welcome_message}
-                        .v2Mode=${!!this.configuration.homepage_header.v2_mode}
-                        .disableSensorGraph=${!!this.configuration.homepage_header.disable_sensor_graph}
-                        .invertCover=${!!this.configuration.homepage_header.invert_cover}
-                        .weatherEntity=${this.configuration.homepage_header.weather_entity?this.configuration.homepage_header.weather_entity:""}
-                        .alarmEntity=${this.configuration.homepage_header.alarm_entity?this.configuration.homepage_header.alarm_entity:""}
-                        @click=${this._handleDwainsDashboardSettingsClick}
-                      >
-                        <ha-icon class="w-6 h-6" .icon=${"mdi:cog"}></ha-icon>
-                      </div>
-                    `:""}
+                    ${/* Dwains settings gear removed: settings moved to the native HA
+                         Options flow (Settings > Devices & Services > Dwains Dashboard >
+                         Configure). The in-dashboard edit card can't render reliably under
+                         HA's scoped custom element registry. */ ""}
                   </div>
                 </div>
                 <div class="mb-4 grid grid-cols-1 lg-grid-cols-2">
@@ -11240,7 +11234,7 @@
           c = i(331);
         const h = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(h).then((async () => {
-          await new Promise((e => setTimeout(e, 2e3))), await window.loadCardHelpers();
+          await new Promise((e => setTimeout(e, 0))), await window.loadCardHelpers();
           class e extends l.WF {
             static get properties() {
               return {
@@ -12221,7 +12215,53 @@
               }
               async _makeCard() {
                 const e = await window.loadCardHelpers();
-                this.card = await e.createCardElement(this._card), this.card.hass = this.hass, this.requestUpdate()
+                // Scoped-custom-element-registry workaround: HA's createCardElement
+                // does document.createElement(tag) which, in this popup's context,
+                // returns a NON-upgraded element for dwains tags even though the tag
+                // IS registered globally -> calling setConfig on it throws "setConfig
+                // is not a function" from inside createCardElement. Catch that and
+                // construct the card directly from the registered class instead.
+                this.card = null;
+                try {
+                  this.card = await e.createCardElement(this._card);
+                } catch (err) {
+                  this.card = null;
+                }
+                // createCardElement catches the internal "setConfig is not a function"
+                // (from the non-upgraded element) and RETURNS a hui-error-card, so also
+                // treat an error card as failure and construct from the class directly.
+                if (!this.card
+                    || typeof this.card.setConfig !== "function"
+                    || this.card.localName === "hui-error-card"
+                    || (this.card._config && this.card._config.type === "error")) {
+                  // Best-effort silent rebuild. NOTE: on HA's scoped-custom-element-
+                  // registry, late-defined dwains popup/edit cards (e.g.
+                  // dwains-edit-homepage-header-card) can't be upgraded outside their
+                  // scoped registry, so this may legitimately fail and HA shows its
+                  // error card until a hard refresh. Kept quiet on purpose; see the
+                  // dd19-dd28 investigation. Works when the registry is "warm".
+                  try {
+                    const tag = ((this._card && this._card.type) || "").replace(/^custom:/, "");
+                    const ok = (el) => el && typeof el.setConfig === "function";
+                    const sc = (c) => !!(c && c.prototype && typeof c.prototype.setConfig === "function");
+                    const base = (sc(window.__dd_orig && window.__dd_orig[tag]) && window.__dd_orig[tag])
+                      || (sc(window.__dd_ctors && window.__dd_ctors[tag]) && window.__dd_ctors[tag])
+                      || (sc(customElements.get(tag)) && customElements.get(tag)) || null;
+                    let el = null;
+                    if (base) {
+                      const fixTag = tag + "-ddfix";
+                      try { if (!customElements.get(fixTag)) customElements.define(fixTag, class extends base {}); } catch (e) {}
+                      const c = document.createElement(fixTag);
+                      if (ok(c)) el = c;
+                    }
+                    if (!ok(el)) {
+                      el = document.createElement(tag);
+                      try { if (customElements.upgrade) customElements.upgrade(el); } catch (e) {}
+                    }
+                    if (ok(el)) { el.setConfig(this._card); this.card = el; }
+                  } catch (err) {}
+                }
+                if (this.card) { this.card.hass = this.hass; this.requestUpdate(); }
               }
               async _applyStyles() {
                 let e = await (0, n.V)(this, "$ ha-dialog");

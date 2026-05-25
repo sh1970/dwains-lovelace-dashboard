@@ -14,8 +14,36 @@
 // it becomes a no-op once this script has defined the element.
 (function () {
   "use strict";
-  if (!window.customElements || customElements.get("dwains-dashboard-layout")) {
-    return;
+  if (!window.customElements) return;
+
+  // Capture EVERY dwains element's class at the registry prototype level, before
+  // the big bundle runs. HA's scoped-custom-element-registry means the bundle may
+  // define elements on a registry that HA's createCardElement / hui-view doesn't
+  // read ("Custom element doesn't exist" / "setConfig is not a function"). The
+  // prototype.define is shared by all registry instances, so patching it here
+  // records the real class no matter which registry the bundle targets -- giving
+  // the self-heal below the class it needs to (re)define on the live registry.
+  try {
+    var REG = window.CustomElementRegistry && window.CustomElementRegistry.prototype;
+    if (REG && REG.define && !REG.__dd_capture) {
+      var _origDefine = REG.define;
+      REG.define = function (name, ctor, opts) {
+        try {
+          if (typeof name === "string" &&
+              (name.indexOf("dwains") === 0 || name === "homepage-card" ||
+               name === "devices-card" || name === "more-page-card" || name === "more-pages-card")) {
+            (window.__dd_ctors = window.__dd_ctors || {})[name] = ctor;
+          }
+        } catch (e) {}
+        return _origDefine.call(this, name, ctor, opts);
+      };
+      REG.__dd_capture = true;
+    }
+  } catch (e) {}
+
+  if (customElements.get("dwains-dashboard-layout")) {
+    // Layout already defined on this registry; the self-heal loop still needs to
+    // run (cards/popups), so fall through rather than returning.
   }
   class DwainsDashboardLayout extends HTMLElement {
     constructor() {
@@ -134,17 +162,25 @@
     // can't be reused across registries, so define a throwaway subclass. Once
     // homepage-card exists on the live registry HA's own whenDefined->ll-rebuild
     // recovers the card automatically (the rebuild below is just a backstop).
+    var _attempted = {};
     function ensureCardsDefined() {
       var ctors = window.__dd_ctors, n = 0;
       if (!ctors) return 0;
       for (var name in ctors) {
+        if (_attempted[name] || !ctors[name]) continue;   // one shot per name -> no loop
+        if (customElements.get(name)) { _attempted[name] = true; continue; }
+        _attempted[name] = true;
         try {
-          if (ctors[name] && !customElements.get(name)) {
-            customElements.define(name, class extends ctors[name] {});
+          customElements.define(name, class extends ctors[name] {});
+          if (customElements.get(name)) {
             console.warn("[dwains-preload] (re)defined " + name + " on live registry");
             n++;
+          } else {
+            console.warn("[dwains-preload] define did NOT stick for " + name);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn("[dwains-preload] define threw for " + name + ": " + (e && e.message));
+        }
       }
       return n;
     }
@@ -156,26 +192,39 @@
       var pops = deep(document, "card-tools-popup", [], 0);
       for (var i = 0; i < pops.length; i++) {
         try {
-          if (pops[i].open && typeof pops[i]._makeCard === "function") {
+          // Once per popup instance -> never re-make in a loop.
+          if (pops[i].open && !pops[i].__dd_remade && typeof pops[i]._makeCard === "function") {
+            pops[i].__dd_remade = true;
             pops[i]._makeCard();
             console.warn("[dwains-preload] re-made open popup card on live registry");
           }
         } catch (e) {}
       }
     }
-    // Only real, configured, connected error cards -- not the empty placeholder
-    // hui-error-cards that live unused inside some third-party cards' shadow DOM.
-    // hui-error-card config can be {error: ...} OR {message: ...} ("Custom element
-    // doesn't exist: ..."), so check both.
+    // Is this element inside a dialog/popup? (walk up through shadow boundaries)
+    function inDialog(el) {
+      var n = el;
+      for (var i = 0; i < 40 && n; i++) {
+        var ln = n.localName || "";
+        if (ln === "ha-dialog" || ln === "card-tools-popup") return true;
+        n = n.parentNode || (n.getRootNode && n.getRootNode() && n.getRootNode().host) || null;
+      }
+      return false;
+    }
+    // Only real, configured, connected error cards in the VIEW -- not the empty
+    // placeholders inside third-party cards, and NOT cards inside a popup/dialog
+    // (the settings/edit popup has a known unfixable scoped-registry error; healing
+    // it just spams and triggers @ll-rebuild loops). hui-error-card config can be
+    // {error: ...} OR {message: ...} ("Custom element doesn't exist: ..."), both.
     function realErrorCards() {
       var all = deep(document, "hui-error-card", [], 0), out = [];
       for (var i = 0; i < all.length; i++) {
         var ec = all[i], cfg = ec._config || {};
-        if (ec.isConnected && (cfg.error || cfg.message || cfg.origConfig || (ec.textContent || "").trim())) out.push(ec);
+        if (ec.isConnected && (cfg.error || cfg.message || cfg.origConfig || (ec.textContent || "").trim()) && !inDialog(ec)) out.push(ec);
       }
       return out;
     }
-    var tries = 0, lastAction = 0;
+    var tries = 0, lastAction = 0, healActions = 0;
     function tick() {
       tries++;
       ensureLayoutDefined();
@@ -183,13 +232,17 @@
       // The view-level config-error self-heal is only needed shortly after load;
       // the registry ensure above must run forever (settings/popup cards can be
       // defined lazily long after load, when their dialog is first opened).
-      if (tries < 120 && onDwains()) {
+      // HARD CAP on rebuild actions so a card that can't be recovered (e.g. a
+      // popup error card) never turns into an infinite rebuild loop.
+      if (healActions < 6 && tries < 120 && onDwains()) {
         var errs = realErrorCards();
-        if (errs.length && Date.now() - lastAction > 1200) {
+        if (errs.length && Date.now() - lastAction > 1500) {
           lastAction = Date.now();
-          console.warn("[dwains-preload] heal: real errors=", errs.length,
+          healActions++;
+          console.warn("[dwains-preload] heal #" + healActions + ": real errors=", errs.length,
             "| layout=", !!customElements.get("dwains-dashboard-layout"),
             "| homepage-card=", !!customElements.get("homepage-card"),
+            "| editCard=", !!customElements.get("dwains-edit-homepage-header-card"),
             "| firstError=", (errs[0]._config && (errs[0]._config.message || errs[0]._config.error)));
           for (var i = 0; i < errs.length; i++) {
             try { errs[i].dispatchEvent(new Event("ll-rebuild", { bubbles: true, composed: true })); } catch (e) {}

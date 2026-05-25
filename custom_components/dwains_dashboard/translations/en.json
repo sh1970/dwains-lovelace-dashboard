@@ -19,10 +19,18 @@
     "step": {
       "init": {
         "title": "Dwains Dashboard Settings",
-        "description": "",
+        "description": "These are the same settings as the in-dashboard gear menu, edited here natively so they always work.",
         "data": {
+          "sidepanel_title": "Side panel title",
           "sidepanel_icon": "Side panel icon",
-          "sidepanel_title": "Side panel title"
+          "disable_clock": "Disable clock",
+          "am_pm_clock": "12-hour (AM/PM) clock",
+          "disable_welcome_message": "Disable welcome message",
+          "v2_mode": "Enable v2 mode (layout)",
+          "disable_sensor_graph": "Disable sensor graph",
+          "invert_cover": "Invert cover state",
+          "weather_entity": "Weather entity",
+          "alarm_entity": "Alarm entity"
         }
       }
     }
