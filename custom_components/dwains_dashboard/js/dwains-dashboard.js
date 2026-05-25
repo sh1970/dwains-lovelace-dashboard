@@ -8270,23 +8270,45 @@
             this.startedUp = !1, this.timeout = !1, this._hass = window.__dd_get_hass(), this.cardHelpers = await this.loadHelpers(), console.log("[DD-DEBUG] homepage-card.setConfig ran; hass=", !!this._hass, "cardHelpers=", !!this.cardHelpers, "DD-BUILD-dd12"), this.selectedArea = window.location.hash.substring(1), this.areaEditMode = !1, this.favoriteEditMode = !1, this.areaViewEditMode = !1, this.areaViewDisplayGrouped = "false" != l.A.get("dwains_dashboard_areaViewDisplayGrouped"), this.areaDisplayGrouped = "false" != l.A.get("dwains_dashboard_areaDisplayGrouped"), this._config = e
           }
           async connectedCallback() {
-            super.connectedCallback(), await this._loadData(), this._unsub || (this._unsub = await this._hass.connection.subscribeEvents((() => this._reloadCard()), "dwains_dashboard_homepage_card_reload")), [800, 2000, 4000, 7000, 12000].forEach((d => setTimeout((() => {
-              try {
-                this.shadowRoot && this.shadowRoot.querySelectorAll(".area-button ha-icon").forEach((ic => {
-                  const v = ic.icon;
-                  if (!v || v.indexOf(":") < 1 || 0 === v.indexOf("mdi:")) return;
-                  const sr = ic.shadowRoot,
-                    sv = sr && sr.querySelector("ha-svg-icon");
-                  if (sv && sv.path) return;
-                  const pa = sr && sr.querySelector("svg path");
-                  if (pa && (pa.getAttribute("d") || "").length) return;
-                  ic.icon = "", ic.icon = v
-                }))
-              } catch (e) {}
-            }), d)))
+            super.connectedCallback(), await this._loadData(), this._unsub || (this._unsub = await this._hass.connection.subscribeEvents((() => this._reloadCard()), "dwains_dashboard_homepage_card_reload")), this._scheduleIconRepoke()
           }
           disconnectedCallback() {
             super.disconnectedCallback(), this._unsub && (Promise.resolve(this._unsub()).catch((() => {})), this._unsub = void 0)
+          }
+          updated(e) {
+            this._scheduleIconRepoke()
+          }
+          // Area icons come straight from HA's area registry and may be mdi: OR a
+          // custom icon-pack (hue:/kuf:). ha-icon resolves an icon ONCE; if the mdi
+          // icon DB or the custom pack isn't ready yet (a per-load timing race) the
+          // icon stays blank and never retries. So we re-poke any BLANK area-button
+          // ha-icon (clear + reset .icon) to force re-resolution once the source is
+          // available. Covers mdi AND custom packs, and runs on every render so area
+          // switches / reloads are covered too (the old code ran once on connect and
+          // skipped mdi: entirely).
+          _repokeIcons() {
+            try {
+              if (!this.shadowRoot) return;
+              this.shadowRoot.querySelectorAll(".area-button ha-icon").forEach((ic => {
+                const v = ic.icon;
+                if (!v || v.indexOf(":") < 1) return;
+                const sr = ic.shadowRoot;
+                const sv = sr && sr.querySelector("ha-svg-icon");
+                if (sv && sv.path) return;
+                const pa = sr && sr.querySelector("svg path");
+                if (pa && (pa.getAttribute("d") || "").length) return;
+                ic.icon = "", ic.icon = v
+              }))
+            } catch (e) {}
+          }
+          _scheduleIconRepoke() {
+            if (this.__iconRepokeScheduled) return;
+            this.__iconRepokeScheduled = !0;
+            const times = [60, 300, 900, 2000, 4000, 8000, 12000];
+            times.forEach(((d, i) => setTimeout((() => {
+              if (i === times.length - 1) this.__iconRepokeScheduled = !1;
+              this._repokeIcons()
+            }), d)))
           }
           async _reloadCard() {
             await this._loadData(), this.requestUpdate()
@@ -10893,8 +10915,10 @@
               let i = !1;
               if (t) {
                 if (t.entity_id.startsWith("cover.") && (s.s7.includes(t.state) || s.jj.includes(t.state) || this.configuration.homepage_header.invert_cover ? !s.s7.includes(t.state) && s.jj.includes(t.state) && this.configuration.homepage_header.invert_cover && (i = !0) : i = !0), s.s7.includes(t.state) || s.jj.includes(t.state) || t.entity_id.startsWith("cover.") || (i = !0), t.entity_id.startsWith("climate.")) {
-                  const e = t.attributes.hvac_action;
-                  i = e && "off" !== e && "idle" !== e
+                  // Climate "on" = state not off/unavailable (same test as the house-
+                  // information COUNT). Do NOT gate on hvac_action: an AC that's on but
+                  // idle, or that reports no hvac_action at all, would otherwise be
+                  // excluded here -> empty modal even though the count showed "1 on".
                 }
                 const a = !this.deviceClass || t.attributes.device_class === this.deviceClass;
                 if (i && a) {
