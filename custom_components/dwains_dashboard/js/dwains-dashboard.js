@@ -5997,8 +5997,25 @@
           grid-template-columns: repeat(2,minmax(0,1fr));
           gap: 1rem;
         }
-        ha-select, ha-textfield, ha-formfield {
+        ha-select, select, ha-input, ha-formfield {
           width: 100%;
+        }
+        select {
+          min-height: 56px;
+          padding: 0 40px 0 14px;
+          color: var(--primary-text-color);
+          background: var(--ha-color-surface-high, var(--ha-color-form-background, var(--ha-color-surface-default, var(--card-background-color))));
+          border: 1px solid var(--divider-color);
+          border-radius: var(--ha-card-border-radius, 12px);
+          transition: border-color 0.16s ease;
+        }
+        select:hover {
+          border-color: var(--secondary-text-color);
+        }
+        select:focus,
+        select:focus-visible {
+          outline: none;
+          border-color: var(--accent-color);
         }
         `]
             }
@@ -6046,11 +6063,11 @@
               this.customPopup = e.target.checked
             }
             _haSelectChanged(e) {
-              e.stopPropagation();
+              window.__dd_close_parent_dropdown && window.__dd_close_parent_dropdown(e), e.stopPropagation();
               const t = e.currentTarget || e.target,
-                i = t && t.name ? t.name : t && t.dataset && t.dataset.field ? t.dataset.field : t && t.type ? t.type : void 0;
-              let a = void 0 !== e.detail && void 0 !== e.detail.value ? e.detail.value : e.target && e.target !== t && void 0 !== e.target.value ? e.target.value : t && void 0 !== t.value ? t.value : void 0;
-              i && void 0 !== a && (this[i] = `${a}`, this.requestUpdate())
+                i = t.name || t.type || t.getAttribute && t.getAttribute("type"),
+                a = e.detail && void 0 !== e.detail.value ? e.detail.value : e.detail && e.detail.item ? e.detail.item.value : t.selectedItem ? t.selectedItem.value : t.value;
+              return i && void 0 !== a && (this[i] = a), this.requestUpdate()
             }
             _stopPropagation(e) {
               e.stopPropagation()
@@ -6060,88 +6077,52 @@
         <div class="edit-element">
             <h1 style="font-size: 15px; font-weight: bold;">${(0,o.A)(this.hass,"entity.edit_entity")} "${this.entity}"</h1>
 
-            <ha-textfield 
+            <ha-input 
              label=${(0,o.A)(this.hass,"entity.friendly_name")}
               .value=${this.friendlyName}
               @input=${this._friendlyNameChanged}
-            ></ha-textfield>
+            ></ha-input>
 
             <h2>${(0,o.A)(this.hass,"editor.default_col_row")}</h2>
             <div class="grid-2">
-              <ha-textfield
-               label=${(0,o.A)(this.hass,"editor.row_span")}
-                .value=${this.rowSpan}
-                name="rowSpan"
-                type="number"
-                min="1"
-                max="2"
-                step="1"
-                inputmode="numeric"
-                @input=${this._haSelectChanged}
-              ></ha-textfield>
-              <ha-textfield
-               label=${(0,o.A)(this.hass,"editor.col_span")}
-                .value=${this.colSpan}
-                name="colSpan"
-                type="number"
-                min="1"
-                max="2"
-                step="1"
-                inputmode="numeric"
-                @input=${this._haSelectChanged}
-              ></ha-textfield>
+              <select name="rowSpan" .value=${this.rowSpan} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${(0,o.A)(this.hass,"editor.row")}</option>
+                <option value="2">2 ${(0,o.A)(this.hass,"editor.rows")}</option>
+              </select>
+              <select name="colSpan" .value=${this.colSpan} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${(0,o.A)(this.hass,"editor.column")}</option>
+                <option value="2">2 ${(0,o.A)(this.hass,"editor.columns")}</option>
+              </select>
             </div>
 
             <h2>${(0,o.A)(this.hass,"editor.large_col_row")}</h2>
             <div class="grid-2">
-              <ha-textfield
-               label=${(0,o.A)(this.hass,"editor.row_span")}
-                .value=${this.rowSpanLg}
-                name="rowSpanLg"
-                type="number"
-                min="1"
-                max="3"
-                step="1"
-                inputmode="numeric"
-                @input=${this._haSelectChanged}
-              ></ha-textfield>
-              <ha-textfield
-               label=${(0,o.A)(this.hass,"editor.col_span")}
-                .value=${this.colSpanLg}
-                name="colSpanLg"
-                type="number"
-                min="1"
-                max="3"
-                step="1"
-                inputmode="numeric"
-                @input=${this._haSelectChanged}
-              ></ha-textfield>
+              <select name="rowSpanLg" .value=${this.rowSpanLg} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${(0,o.A)(this.hass,"editor.row")}</option>
+                <option value="2">2 ${(0,o.A)(this.hass,"editor.rows")}</option>
+                <option value="3">3 ${(0,o.A)(this.hass,"editor.rows")}</option>
+              </select>
+              <select name="colSpanLg" .value=${this.colSpanLg} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${(0,o.A)(this.hass,"editor.column")}</option>
+                <option value="2">2 ${(0,o.A)(this.hass,"editor.columns")}</option>
+                <option value="3">3 ${(0,o.A)(this.hass,"editor.columns")}</option>
+              </select>
             </div>
 
             <h2>${(0,o.A)(this.hass,"editor.extra_large_col_row")}</h2>
             <div class="grid-2">
-              <ha-textfield
-               label=${(0,o.A)(this.hass,"editor.row_span")}
-                .value=${this.rowSpanXl}
-                name="rowSpanXl"
-                type="number"
-                min="1"
-                max="4"
-                step="1"
-                inputmode="numeric"
-                @input=${this._haSelectChanged}
-              ></ha-textfield>
-              <ha-textfield
-               label=${(0,o.A)(this.hass,"editor.col_span")}
-                .value=${this.colSpanXl}
-                name="colSpanXl"
-                type="number"
-                min="1"
-                max="4"
-                step="1"
-                inputmode="numeric"
-                @input=${this._haSelectChanged}
-              ></ha-textfield>
+              <select name="rowSpanXl" .value=${this.rowSpanXl} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${(0,o.A)(this.hass,"editor.row")}</option>
+                <option value="2">2 ${(0,o.A)(this.hass,"editor.rows")}</option>
+                <option value="3">3 ${(0,o.A)(this.hass,"editor.rows")}</option>
+                <option value="4">4 ${(0,o.A)(this.hass,"editor.rows")}</option>
+              </select>
+              <select name="colSpanXl" .value=${this.colSpanXl} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${(0,o.A)(this.hass,"editor.column")}</option>
+                <option value="2">2 ${(0,o.A)(this.hass,"editor.columns")}</option>
+                <option value="3">3 ${(0,o.A)(this.hass,"editor.columns")}</option>
+                <option value="4">4 ${(0,o.A)(this.hass,"editor.columns")}</option>
+              </select>
             </div>
 
             <ha-formfield .label=${(0,o.A)(this.hass,"entity.disable")}>
@@ -8357,10 +8338,10 @@
             super.connectedCallback(), await this._loadData(), this._unsub || (this._unsub = await this._hass.connection.subscribeEvents((() => this._reloadCard()), "dwains_dashboard_homepage_card_reload")), this._scheduleIconRepoke()
           }
           disconnectedCallback() {
-            super.disconnectedCallback(), this._unsub && (Promise.resolve(this._unsub()).catch((() => {})), this._unsub = void 0)
+            super.disconnectedCallback(), this._unsub && (Promise.resolve(this._unsub()).catch((() => {})), this._unsub = void 0), this.__masonryRO && (this.__masonryRO.disconnect(), this.__masonryRO = void 0)
           }
           updated(e) {
-            this._scheduleIconRepoke()
+            this._scheduleIconRepoke(), this._layoutMasonry()
           }
           // Area icons come straight from HA's area registry and may be mdi: OR a
           // custom icon-pack (hue:/kuf:). ha-icon resolves an icon ONCE; if the mdi
@@ -8393,6 +8374,49 @@
               if (i === times.length - 1) this.__iconRepokeScheduled = !1;
               this._repokeIcons()
             }), d)))
+          }
+          // Sections-style dense packing for the area-view card grids (.dd-masonry):
+          // measure each card and set its grid row-span so short cards pack tightly
+          // into the column beside a tall card (e.g. a thermostat) instead of leaving
+          // a big empty gap. A ResizeObserver re-runs it as cards lazy-mount / their
+          // graphs load (height changes) / on window resize. Disabled in edit mode so
+          // drag-sorting keeps the normal grid.
+          _layoutMasonry() {
+            try {
+              if (!this.shadowRoot) return;
+              const grids = this.shadowRoot.querySelectorAll(".dd-masonry");
+              if (!grids.length) return;
+              if (!this.__masonryRO && "ResizeObserver" in window) {
+                this.__masonryRO = new ResizeObserver((() => {
+                  this.__masonryRaf || (this.__masonryRaf = requestAnimationFrame((() => {
+                    this.__masonryRaf = 0, this._applyMasonrySpans()
+                  })))
+                }))
+              }
+              grids.forEach((g => {
+                Array.from(g.children).forEach((item => {
+                  try { this.__masonryRO && this.__masonryRO.observe(item) } catch (e) {}
+                }))
+              })), this._applyMasonrySpans()
+            } catch (e) {}
+          }
+          _applyMasonrySpans() {
+            try {
+              if (!this.shadowRoot) return;
+              const edit = this.areaViewEditMode || this.favoriteEditMode;
+              this.shadowRoot.querySelectorAll(".dd-masonry").forEach((g => {
+                if (edit) {
+                  g.style.gridAutoRows = "auto", g.style.alignItems = "stretch", g.style.rowGap = "1rem";
+                  Array.from(g.children).forEach((item => item.style.gridRowEnd = ""))
+                } else {
+                  g.style.gridAutoRows = "", g.style.alignItems = "", g.style.rowGap = "";
+                  Array.from(g.children).forEach((item => {
+                    const h = item.getBoundingClientRect().height;
+                    h > 0 && (item.style.gridRowEnd = "span " + (Math.ceil(h) + 16))
+                  }))
+                }
+              }))
+            } catch (e) {}
           }
           async _reloadCard() {
             await this._loadData(), this.requestUpdate()
@@ -10202,6 +10226,17 @@
         }
         .grid {
             display: grid
+        }
+        /* Sections-style dense packing for area-view cards: a 1px row grid where
+           _layoutMasonry() sets each card's row-span to its measured height, so
+           short cards stack tightly into the column beside a tall card (e.g. a
+           thermostat) instead of leaving big gaps. align-items:start sizes each
+           grid item to its content (so we can measure it without a feedback loop)
+           and keeps the card pinned to the top of its span. */
+        .dd-masonry {
+            grid-auto-rows: 1px;
+            row-gap: 0;
+            align-items: start;
         }
         .hidden {
             display: none
