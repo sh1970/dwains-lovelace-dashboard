@@ -432,7 +432,21 @@
       // swallow it so it isn't an "Uncaught (in promise)" error. The dwains source
       // (notification card unsubscribe) is already guarded; this covers reconnects
       // and any other card that triggers the same harmless rejection.
-      if (typeof __m === 'string' && __m.indexOf('Subscription not found') !== -1) {
+      // NOTE: 'invalid state' is intentionally checked together with HA-specific
+      // strings to avoid suppressing unrelated errors from other custom cards.
+      var __isHaWebsocketNoise = (
+        __m.indexOf('Subscription not found') !== -1 ||
+        __m.indexOf('Transition was aborted') !== -1
+      );
+      var __isInvalidState = (
+        __m.indexOf('invalid state') !== -1 &&
+        (e.reason && e.reason.stack && (
+          e.reason.stack.indexOf('home-assistant') !== -1 ||
+          e.reason.stack.indexOf('hass') !== -1 ||
+          e.reason.stack.indexOf('connection') !== -1
+        ) || __isHaWebsocketNoise)
+      );
+      if (typeof __m === 'string' && (__isHaWebsocketNoise || __isInvalidState)) {
         e.preventDefault();
         return;
       }
@@ -3015,7 +3029,16 @@
           constructor() {
             this.startDwainsDashboard();
             const e = this.locationChanged.bind(this);
-            window.addEventListener("location-changed", e), window.addEventListener("popstate", e), window.__dd_get_hass().connection.subscribeEvents((() => this.reload()), "dwains_dashboard_reload")
+            window.addEventListener("location-changed", e), window.addEventListener("popstate", e);
+            this._subscribeReload();
+          }
+          _subscribeReload() {
+            const hass = window.__dd_get_hass();
+            if (hass && hass.connection) {
+              hass.connection.subscribeEvents((() => this.reload()), "dwains_dashboard_reload");
+            } else if ((this.__ddSubscribeRetries = (this.__ddSubscribeRetries || 0) + 1) <= 30) {
+              setTimeout(() => this._subscribeReload(), 200);
+            }
           }
           async loadData() {
             this.configuration = await window.__dd_get_hass().callWS({
@@ -3061,8 +3084,14 @@
               this.buildDwainsNavigation();
             }, 500), this.applyDwainsTheme())
           }
-          applyDwainsTheme() {
+          applyDwainsTheme(isRetry) {
+            if (!isRetry) this.__ddThemeRetries = 0;
             const e = this.getRoot();
+            if (!e || !e.shadowRoot) {
+              if ((this.__ddThemeRetries = (this.__ddThemeRetries || 0) + 1) <= 20) setTimeout(() => this.applyDwainsTheme(true), 150);
+              return
+            }
+            this.__ddThemeRetries = 0;
             (0, s.QD)(e.shadowRoot.querySelector("#view"), {
               themes: {
                 "dwains-theme": {
@@ -3072,14 +3101,18 @@
             }, "dwains-theme", !0)
           }
           async buildDwainsNavigation() {
+            if (this.__ddNavBuilding) return;
+            this.__ddNavBuilding = true;
             const e = this.getRoot();
             if (!e || !e.shadowRoot) {
-              if ((this.__ddNavRetries = (this.__ddNavRetries || 0) + 1) <= 40) setTimeout((() => this.buildDwainsNavigation()), 150);
+              if ((this.__ddNavRetries = (this.__ddNavRetries || 0) + 1) <= 40) setTimeout((() => { this.__ddNavBuilding = false; this.buildDwainsNavigation(); }), 150);
+              else this.__ddNavBuilding = false;
               return
             }
             this.__ddNavRetries = 0, console.log("Building Dwains Dashboard Navigation");
             const t = e.shadowRoot.querySelector(".header");
-            t && (t.style.display = "none"), await this._buildDwainsNavigation(e)
+            t && (t.style.display = "none");
+            try { await this._buildDwainsNavigation(e); } finally { this.__ddNavBuilding = false; }
           }
           reload() {
             const e = (0, a._R)();
@@ -3105,7 +3138,14 @@
         }
         const d = [customElements.whenDefined("hui-masonry-view"), customElements.whenDefined("hc-lovelace")];
         Promise.race(d).then((() => {
-          window.dwains_dashboard || (window.dwains_dashboard = new l)
+          if (window.dwains_dashboard) return;
+          const _ddStart = () => {
+            const ha = document.querySelector("home-assistant");
+            const main = ha && ha.shadowRoot && ha.shadowRoot.querySelector("home-assistant-main");
+            if (!main || !main.shadowRoot) { setTimeout(_ddStart, 150); return; }
+            window.dwains_dashboard = new l;
+          };
+          _ddStart();
         }))
       },
       462: (e, t, i) => {
