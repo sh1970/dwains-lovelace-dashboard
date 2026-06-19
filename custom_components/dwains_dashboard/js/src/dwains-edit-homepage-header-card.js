@@ -12,33 +12,84 @@ Promise.race(bases2).then(async () => {
 
   class DwainsEditHomepageHeaderCard extends LitElement {
 
-    static get styles() {
-      return [
-        css`
-        .w-full {
-          width: 100%;
-        }
-        .edit-element {
-          padding: 20px;
-        }
-        .add-button {
-          font-size: 16px;
-          border: 2px solid #4591B8;
-          padding: 5px;
-          margin-bottom: 50px;
-          background: #459CEE;
-          border-radius: 20px;
-          color: white;
-        }
-        .card-footer {
-          display: flex;
-          justify-content: flex-end;
-          padding: 8px;
-          border-top: 1px solid var(--divider-color);
-        }
-        .block {
-          display: block;
-        }
+	    static get styles() {
+	      return [
+	        css`
+	        :host {
+	          display: block;
+	          color: var(--primary-text-color);
+	        }
+	        .w-full {
+	          width: 100%;
+	        }
+	        .edit-element {
+	          padding: 20px;
+	          box-sizing: border-box;
+	        }
+	        .tabs {
+	          display: inline-flex;
+	          gap: 4px;
+	          padding: 4px;
+	          margin-bottom: 18px;
+	          border-radius: 10px;
+	          background: var(--secondary-background-color);
+	        }
+	        .tab {
+	          border: 0;
+	          border-radius: 8px;
+	          padding: 9px 14px;
+	          font: inherit;
+	          font-weight: 600;
+	          color: var(--secondary-text-color);
+	          background: transparent;
+	          cursor: pointer;
+	        }
+	        .tab.active {
+	          color: var(--text-primary-color);
+	          background: var(--primary-color);
+	        }
+	        .setting-list {
+	          display: grid;
+	          gap: 10px;
+	          margin-bottom: 18px;
+	        }
+	        .setting-row {
+	          display: flex;
+	          align-items: center;
+	          gap: 12px;
+	          min-height: 36px;
+	          font-size: 14px;
+	          cursor: pointer;
+	        }
+	        .setting-row input {
+	          width: 18px;
+	          height: 18px;
+	          margin: 0;
+	          accent-color: var(--primary-color);
+	        }
+	        .field-stack {
+	          display: grid;
+	          gap: 14px;
+	        }
+	        ha-entity-picker {
+	          display: block;
+	          width: 100%;
+	        }
+	        .info-panel {
+	          line-height: 1.5;
+	          font-size: 14px;
+	        }
+	        .card-footer {
+	          display: flex;
+	          justify-content: flex-end;
+	          gap: 8px;
+	          padding-top: 18px;
+	          margin-top: 22px;
+	          border-top: 1px solid var(--divider-color);
+	        }
+	        .block {
+	          display: block;
+	        }
         .hidden {
           display: none;
         }
@@ -130,91 +181,80 @@ Promise.race(bases2).then(async () => {
           }
       );
     }
-    _handleTabClick(ev){
-      const page = ev.currentTarget.page;
-      this.selectedTab = page;
+	    _handleTabClick(ev){
+	      const page = ev.currentTarget.page;
+	      this.selectedTab = page;
 
-      this.requestUpdate();
-    }
+	      this.requestUpdate();
+	    }
 
-    render() {
-      if(!this.configuration || this.configuration.length === 0){
-        return html``;
-      }
-      return html`
-      <div class="edit-element">
-        <paper-tabs selected="${this.selectedTab}">
-            <paper-tab .page=${"1"} @click=${this._handleTabClick}">${translateEngine(this.hass, 'global.settings')}</paper-tab>
-            <paper-tab .page=${"2"} @click=${this._handleTabClick}">${translateEngine(this.hass, 'global.dashboard_information')}</paper-tab>
-        </paper-tabs>
-        <div class=${this.selectedTab == 1 ? 'block' : "hidden"}>
-          <div class="w-full">
-          <mwc-formfield .label=${translateEngine(this.hass, 'global.disable_clock')}>
-            <ha-checkbox
-              @change=${this._disableClockValueChanged}
-              .checked=${this.disableClock}
-            ></ha-checkbox>
-          </mwc-formfield>
-          </div>
-          <div class="w-full">
-          <mwc-formfield .label=${translateEngine(this.hass, 'global.am_pm_clock')}>
-            <ha-checkbox
-              @change=${this._amPmClockValueChanged}
-              .checked=${this.amPmClock}
-            ></ha-checkbox>
-          </mwc-formfield>
-          </div>
-          <div class="w-full">
-          <mwc-formfield .label=${translateEngine(this.hass, 'global.disable_welcome_message')}>
-            <ha-checkbox
-              @change=${this._disableWelcomeMessageValueChanged}
-              .checked=${this.disableWelcomeMessage}
-            ></ha-checkbox>
-          </mwc-formfield>
-          </div>
-          <div class="w-full">
-          <mwc-formfield .label=${translateEngine(this.hass, 'global.v2_mode')}>
-            <ha-checkbox
-              @change=${this._v2ModeValueChanged}
-              .checked=${this.v2Mode}
-            ></ha-checkbox>
-          </mwc-formfield>
-          </div>
-          <div class="w-full">
-          <mwc-formfield .label=${translateEngine(this.hass, 'global.disable_sensor_graph')}>
-            <ha-checkbox
-              @change=${this._disableSensorGraphValueChanged}
-              .checked=${this.disableSensorGraph}
-            ></ha-checkbox>
-          </mwc-formfield>
-          </div>
-          <div class="w-full">
-          <mwc-formfield .label=${translateEngine(this.hass, 'global.invert_cover')}>
-            <ha-checkbox
-              @change=${this._invertCoverValueChanged}
-              .checked=${this.invertCover}
-            ></ha-checkbox>
-          </mwc-formfield>
-          </div>
-          <ha-entity-picker
-            .hass=${this.hass}
-            .label=${translateEngine(this.hass, 'global.weather_entity')}
-            .value=${this.weatherEntity}
-            .includeDomains=${["weather"]}
-            @value-changed=${this._weatherEntityPicked}
-          ></ha-entity-picker>
-          <ha-entity-picker
-            .hass=${this.hass}
-            .label=${translateEngine(this.hass, 'global.alarm_entity')}
-            .includeDomains=${["alarm_control_panel"]}
-            .value=${this.alarmEntity}
-            @value-changed=${this._alarmEntityPicked}
-          ></ha-entity-picker>
-        </div>
-        <div class=${this.selectedTab == 2 ? 'block' : "hidden"}>
-          <strong>Dwains Dashboard</strong><br>
-          Created by Dwain Scheeren<br>
-          Version ${this.configuration.installed_version}
+	    _renderSettingCheckbox(label, checked, handler) {
+	      return html`
+	        <label class="setting-row">
+	          <input
+	            type="checkbox"
+	            .checked=${Boolean(checked)}
+	            @change=${handler}
+	          >
+	          <span>${label}</span>
+	        </label>
+	      `;
+	    }
+
+	    render() {
+	      if(!this.configuration || this.configuration.length === 0){
+	        return html``;
+	      }
+	      return html`
+	      <div class="edit-element">
+	        <div class="tabs" role="tablist">
+	          <button
+	            class="tab ${this.selectedTab == 1 ? 'active' : ''}"
+	            type="button"
+	            .page=${"1"}
+	            @click=${this._handleTabClick}
+	          >
+	            ${translateEngine(this.hass, 'global.settings')}
+	          </button>
+	          <button
+	            class="tab ${this.selectedTab == 2 ? 'active' : ''}"
+	            type="button"
+	            .page=${"2"}
+	            @click=${this._handleTabClick}
+	          >
+	            ${translateEngine(this.hass, 'global.dashboard_information')}
+	          </button>
+	        </div>
+	        <div class=${this.selectedTab == 1 ? 'block' : "hidden"}>
+	          <div class="setting-list">
+	            ${this._renderSettingCheckbox(translateEngine(this.hass, 'global.disable_clock'), this.disableClock, this._disableClockValueChanged)}
+	            ${this._renderSettingCheckbox(translateEngine(this.hass, 'global.am_pm_clock'), this.amPmClock, this._amPmClockValueChanged)}
+	            ${this._renderSettingCheckbox(translateEngine(this.hass, 'global.disable_welcome_message'), this.disableWelcomeMessage, this._disableWelcomeMessageValueChanged)}
+	            ${this._renderSettingCheckbox(translateEngine(this.hass, 'global.v2_mode'), this.v2Mode, this._v2ModeValueChanged)}
+	            ${this._renderSettingCheckbox(translateEngine(this.hass, 'global.disable_sensor_graph'), this.disableSensorGraph, this._disableSensorGraphValueChanged)}
+	            ${this._renderSettingCheckbox(translateEngine(this.hass, 'global.invert_cover'), this.invertCover, this._invertCoverValueChanged)}
+	          </div>
+	          <div class="field-stack">
+	            <ha-entity-picker
+	              .hass=${this.hass}
+	              .label=${translateEngine(this.hass, 'global.weather_entity')}
+	              .value=${this.weatherEntity}
+	              .includeDomains=${["weather"]}
+	              @value-changed=${this._weatherEntityPicked}
+	            ></ha-entity-picker>
+	            <ha-entity-picker
+	              .hass=${this.hass}
+	              .label=${translateEngine(this.hass, 'global.alarm_entity')}
+	              .includeDomains=${["alarm_control_panel"]}
+	              .value=${this.alarmEntity}
+	              @value-changed=${this._alarmEntityPicked}
+	            ></ha-entity-picker>
+	          </div>
+	        </div>
+	        <div class="info-panel ${this.selectedTab == 2 ? 'block' : "hidden"}">
+	          <strong>Dwains Dashboard</strong><br>
+	          Created by Dwain Scheeren<br>
+	          Version ${this.configuration.installed_version}
         </div>
         <div class="card-footer">
           <ha-button slot="secondaryAction" @click=${(e) => closePopup()}>

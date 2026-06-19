@@ -98,10 +98,11 @@ class DwainsHouseInformationCard extends LitElement {
 
       paper-tabs {
         height: 110px;
-        margin: 0 0.25rem !important;
+        margin: 0 0.25rem;
       }
       paper-tabs paper-tab {
-        padding: 0 0.25rem !important;
+        float: left;
+        padding: 1.5rem 1.5rem;
       }
       .loading-component {
         height: 110px;

@@ -2305,8 +2305,10 @@ function getDwainsHass() {
             weatherIcon = WEATHER_ICONS[weatherState.state];
 
             const lang = this._hass.selectedLanguage || this._hass.language;
-            const resources = this._hass.resources[lang];
-            weatherStateTranslated = resources["component.weather.entity_component._.state." + weatherState.state];
+            const resources = this._hass.resources && this._hass.resources[lang] ? this._hass.resources[lang] : {};
+            weatherStateTranslated = resources["component.weather.entity_component._.state." + weatherState.state]
+              || this._hass.localize(`component.weather.entity_component._.state.${weatherState.state}`)
+              || weatherState.state;
 
             weatherTemperature = weatherState.attributes.temperature + this._hass.config.unit_system['temperature'];
           }

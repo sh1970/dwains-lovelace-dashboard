@@ -153,7 +153,20 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
             white-space: nowrap;
           }
           .content {
-            margin: -20px -24px;
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            margin: 0;
+            overflow-x: hidden;
+          }
+
+          .content > * {
+            display: block;
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
           }
 
           @media all and (max-width: 450px), all and (max-height: 500px) {
@@ -169,7 +182,7 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
             }
 
             .content {
-              width: 400px;
+              width: min(600px, calc(90vw - 48px));
             }
             :host([large]) .content {
               width: calc(90vw - 48px);
