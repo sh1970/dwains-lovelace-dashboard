@@ -2,27 +2,19 @@
 
 ## Important Announcement
 
-Update August 2025
-I thought I had ended Dwains Dashboard. I missed it. I rebuilt version 4.0 from scratch based on the public 3.0 release.
+Update June 2026
 
-Features:
-Ultra simple panel layout. Left shows your Areas. Right shows entities for the selected Area.
-Classic homepage skin. No blueprint screens. Non editable.
+Dwains Dashboard 3.9.0 has been released, and the DD3 source files are now available in this repository.
 
-Currently in Alpha phase. Test features and report issues on Discord.
+DD3 is no longer under active feature development and will slowly be phased out. Existing older issues have been closed as part of a tracker cleanup. If you still experience a bug on DD3, please retest with version 3.9.0 first and open a new issue only when it is still reproducible.
 
-How to try the alpha?
-Download the build at https://discord.gg/7yt64uX
-Join the server. Share your feedback.
+Active development continues in Dwains Dashboard Next:
 
-Dwains Dashboard 3.x story: 
+https://github.com/dwainscheeren/dwains-dashboard-next
 
-I have paused active development on Dwains Dashboard 3.x since start of 2025 and will focus on my new company (SmartHomeShop.io). Regarding DD 3.x I will try merging community pull requests. 3.0 will have compatibility with Home Assistant 2025.4. If you want to make new PR then please submit it. Once it passes verification, I will merge it and publish a release.
+At the time of writing, Dwains Dashboard Next is still in alpha. Feature requests should be considered for Dwains Dashboard Next instead of DD3.
 
-I built Dwains Dashboard as a free, open-source project in my spare time alongside my job. Today my main venture is SmartHomeShop.io, where I develop hardware solutions for Home Assistant and ESPHome. SmartHomeShop.io offers reliable components and ongoing support.
-
-I remain proud of what we built together and motivated to support the community in a new way. If you have valued my work, then also please share my new project SmartHomeShop.io on social media, in Discord channels, or on forums. Your support helps me keep delivering quality solutions.
-Thank you for your support. I look forward to building 4.0 and hardware projects at SmartHomeShop.io.
+I built Dwains Dashboard as a free, open-source project in my spare time alongside my job. I remain proud of what we built together and grateful for everyone who reported bugs, requested features, and helped improve Dwains Dashboard over the years.
 
 — Dwain
 
@@ -66,7 +58,7 @@ Please note if you had previously Dwains Dashboard v1 or v2 installed you need t
 
 **Want to request a new feature request?**
 
-[Open an issue on GitHub](https://github.com/dwainscheeren/dwains-lovelace-dashboard/issues/new) with the title starting with  `FR`  or  `Feature Request`.
+DD3 is no longer under active feature development. Please check [Dwains Dashboard Next](https://github.com/dwainscheeren/dwains-dashboard-next) for future feature requests.
 
 **Support**
 

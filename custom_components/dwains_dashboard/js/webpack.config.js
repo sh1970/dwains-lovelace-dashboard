@@ -2,6 +2,7 @@ const path = require('path');
 
 module.exports = {
   entry: [
+    './src/dwains-runtime-fixes.js',
     './src/dwains-navigation-card.js',
     './src/dwains-dashboard.js',
     './src/dwains-dashboard-layout.js',
