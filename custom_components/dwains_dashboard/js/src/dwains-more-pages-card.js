@@ -11,8 +11,7 @@ import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  const cardHelpers = await window.loadCardHelpers();
+  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
 
     class MorePagesCard extends LitElement {
         static get properties() {
@@ -53,7 +52,17 @@ Promise.race(bases2).then(async () => {
 
           await this._loadData(); //Load areas
 
-          await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_more_pages_reload");
+          if(!this._unsub){
+            this._unsub = await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_more_pages_reload");
+          }
+        }
+
+        disconnectedCallback(){
+          super.disconnectedCallback();
+          if(this._unsub){
+            Promise.resolve(this._unsub()).catch(() => {});
+            this._unsub = undefined;
+          }
         }
 
         async _reloadCard(){
@@ -104,6 +113,7 @@ Promise.race(bases2).then(async () => {
         //   }, 50);
         // }
         _handleCreateMorePageClicked(ev){
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           window.setTimeout(() => {
             fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
@@ -142,6 +152,7 @@ Promise.race(bases2).then(async () => {
         }
 
         _handleEditModeClicked(ev){
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const value = ev.currentTarget.value;
 
@@ -217,7 +228,7 @@ Promise.race(bases2).then(async () => {
                     absolute
                   >
                     <ha-icon-button
-                      .label=${this._hass.localize("ui.common.overflow_menu")}
+                      label=${this._hass.localize("ui.common.overflow_menu")}
                       .path=${mdiDotsVertical}
                       slot="trigger"
                     ></ha-icon-button>
@@ -280,7 +291,7 @@ Promise.race(bases2).then(async () => {
                         absolute
                         >
                           <ha-icon-button
-                              .label=${this._hass.localize("ui.common.overflow_menu")}
+                              label=${this._hass.localize("ui.common.overflow_menu")}
                               .path=${mdiDotsVertical}
                               slot="trigger"
                           ></ha-icon-button>

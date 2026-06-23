@@ -2,6 +2,7 @@ import { popUp } from "./dwains-popup";
 import { fireEvent } from "card-tools/src/event";
 import { mdiDotsVertical } from "@mdi/js";
 import { css, html, LitElement } from 'lit-element';
+import { createCardElementSafe } from './helpers';
 //Herschreven
 class MorePageCard extends LitElement {
 
@@ -87,7 +88,17 @@ class MorePageCard extends LitElement {
 
         await this._loadData(); //Load data
 
-        await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_more_pages_reload");
+        if(!this._unsub){
+            this._unsub = await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_more_pages_reload");
+        }
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if(this._unsub){
+            Promise.resolve(this._unsub()).catch(() => {});
+            this._unsub = undefined;
+        }
     }
 
     async _reloadCard() {
@@ -115,7 +126,7 @@ class MorePageCard extends LitElement {
     }
 
     async createCardElement2(config) {
-        const element = await this.cardHelpers.createCardElement(config);
+        const element = await createCardElementSafe(this.cardHelpers, config, this._hass);
         element.hass = this._hass; // Zorg ervoor dat `this._hass` correct is geïnitialiseerd
         return element;
     }
@@ -161,7 +172,7 @@ class MorePageCard extends LitElement {
                   absolute
                 >
                   <ha-icon-button
-                    .label=${this._hass.localize("ui.common.overflow_menu")}
+                    label=${this._hass.localize("ui.common.overflow_menu")}
                     .path=${mdiDotsVertical}
                     slot="trigger"
                   ></ha-icon-button>

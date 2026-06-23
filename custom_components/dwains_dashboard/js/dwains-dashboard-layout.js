@@ -162,14 +162,11 @@
     // can't be reused across registries, so define a throwaway subclass. Once
     // homepage-card exists on the live registry HA's own whenDefined->ll-rebuild
     // recovers the card automatically (the rebuild below is just a backstop).
-    var _attempted = {};
     function ensureCardsDefined() {
       var ctors = window.__dd_ctors, n = 0;
       if (!ctors) return 0;
       for (var name in ctors) {
-        if (_attempted[name] || !ctors[name]) continue;   // one shot per name -> no loop
-        if (customElements.get(name)) { _attempted[name] = true; continue; }
-        _attempted[name] = true;
+        if (!ctors[name] || customElements.get(name)) continue;
         try {
           customElements.define(name, class extends ctors[name] {});
           if (customElements.get(name)) {
@@ -228,7 +225,15 @@
     function tick() {
       tries++;
       ensureLayoutDefined();
-      if (ensureCardsDefined() > 0) rebuildOpenPopups();
+      if (ensureCardsDefined() > 0) {
+        rebuildOpenPopups();
+        // Late definitions (especially dwains-blueprint-card) can arrive after
+        // the capped startup heal. Rebuild once when a definition was restored.
+        var newlyRecoverable = realErrorCards();
+        for (var recovered = 0; recovered < newlyRecoverable.length; recovered++) {
+          try { newlyRecoverable[recovered].dispatchEvent(new Event("ll-rebuild", { bubbles: true, composed: true })); } catch (e) {}
+        }
+      }
       // The view-level config-error self-heal is only needed shortly after load;
       // the registry ensure above must run forever (settings/popup cards can be
       // defined lazily long after load, when their dialog is first opened).

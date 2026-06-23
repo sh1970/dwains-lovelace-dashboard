@@ -5,8 +5,7 @@ import { closePopup } from "./helpers";
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  const cardHelpers = await window.loadCardHelpers();
+  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
 
 
 
@@ -18,6 +17,20 @@ Promise.race(bases2).then(async () => {
         css`
         .edit-element {
           padding: 20px;
+          max-width: 460px;
+          margin-right: auto;
+          margin-left: auto;
+        }
+        .edit-element ha-icon-picker, .edit-element ha-textfield, .edit-element ha-select, .edit-element ha-entity-picker {
+          display: block;
+          margin: .8rem 0;
+        }
+        .edit-element ha-formfield {
+          display: flex;
+          align-items: center;
+          gap: .6rem;
+          margin: .9rem 0;
+          padding-inline-start: .25rem;
         }
         .add-button {
           font-size: 16px;
@@ -31,6 +44,8 @@ Promise.race(bases2).then(async () => {
         .card-footer {
           display: flex;
           justify-content: flex-end;
+          align-items: center;
+          gap: .75rem;
           padding: 8px;
           border-top: 1px solid var(--divider-color);
         }
@@ -77,6 +92,7 @@ Promise.race(bases2).then(async () => {
       this.disableArea = ev.target.checked;
     }
     _saveButton(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       this.hass.connection.sendMessagePromise({
         type: 'dwains_dashboard/edit_area_button',
@@ -98,24 +114,25 @@ Promise.race(bases2).then(async () => {
       return html`
       <div class="edit-element">
           <ha-icon-picker
-            .label=${translateEngine(this.hass, 'area.icon')}
+            label=${translateEngine(this.hass, 'area.icon')}
             .value=${this.icon}
             .name=${translateEngine(this.hass, 'area.icon')}
             @value-changed=${this._iconPickerChange}
           ></ha-icon-picker>
           <ha-textfield
-            .label=${translateEngine(this.hass, 'area.floor')}
+            label=${translateEngine(this.hass, 'area.floor')}
             .name=${translateEngine(this.hass, 'area.floor')}
             .value=${this.floor}
             .style=${"width: 100%"}
             @input=${this._floorChanged}
           ></ha-textfield>
-          <mwc-formfield .label=${translateEngine(this.hass, 'area.disable')}>
+          <ha-formfield>
             <ha-checkbox
               @change=${this._disableValueChanged}
               .checked=${this.disableArea}
             ></ha-checkbox>
-          </mwc-formfield>
+            <span slot="label">${translateEngine(this.hass, 'area.disable')}</span>
+          </ha-formfield>
           <div class="card-footer">
             <ha-button slot="secondaryAction" @click=${(e) => closePopup()}>
               ${this.hass.localize("ui.common.cancel")}

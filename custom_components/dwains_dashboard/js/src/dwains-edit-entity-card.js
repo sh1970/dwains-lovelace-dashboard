@@ -5,8 +5,7 @@ import { closePopup } from "./helpers";
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  const cardHelpers = await window.loadCardHelpers();
+  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
 
 
 
@@ -33,6 +32,8 @@ Promise.race(bases2).then(async () => {
         .card-footer {
           display: flex;
           justify-content: flex-end;
+          align-items: center;
+          gap: .75rem;
           padding: 8px;
           border-top: 1px solid var(--divider-color);
         }
@@ -41,8 +42,20 @@ Promise.race(bases2).then(async () => {
           grid-template-columns: repeat(2,minmax(0,1fr));
           gap: 1rem;
         }
-        ha-select, ha-textfield, mwc-formfield {
+        ha-select, select, ha-input, ha-formfield {
           width: 100%;
+        }
+        select {
+          min-height: 56px;
+          padding: 0 40px 0 14px;
+          color: var(--primary-text-color);
+          background: var(--ha-color-surface-high, var(--ha-color-form-background, var(--ha-color-surface-default, var(--card-background-color))));
+          border: 1px solid var(--divider-color);
+          border-radius: var(--ha-card-border-radius, 12px);
+        }
+        select:focus, select:focus-visible {
+          outline: none;
+          border-color: var(--accent-color);
         }
         `
       ]
@@ -69,6 +82,7 @@ Promise.race(bases2).then(async () => {
       this.customPopup = config.customPopup ? config.customPopup : false;
     }
     _saveButton(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       this.hass.connection.sendMessagePromise({
         type: 'dwains_dashboard/edit_entity',
@@ -117,9 +131,13 @@ Promise.race(bases2).then(async () => {
       this.customPopup = ev.target.checked;
     }
     _haSelectChanged(ev) {
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
-      const type = ev.target.type;
-      this[type] = ev.target.value;
+      const target = ev.currentTarget || ev.target;
+      const type = target.name || target.type || target.getAttribute?.("type");
+      const value = ev.detail?.value ?? ev.detail?.item?.value ?? target.selectedItem?.value ?? target.value;
+      if(type && value !== undefined) this[type] = value;
+      this.requestUpdate();
     }
     _stopPropagation(ev){
       ev.stopPropagation();
@@ -129,126 +147,84 @@ Promise.race(bases2).then(async () => {
         <div class="edit-element">
             <h1 style="font-size: 15px; font-weight: bold;">${translateEngine(this.hass, 'entity.edit_entity')} "${this.entity}"</h1>
 
-            <ha-textfield
-              .label=${translateEngine(this.hass, 'entity.friendly_name')}
+            <ha-input
+              label=${translateEngine(this.hass, 'entity.friendly_name')}
               .value=${this.friendlyName}
               @input=${this._friendlyNameChanged}
-            ></ha-textfield>
+            ></ha-input>
 
             <h2>${translateEngine(this.hass, 'editor.default_col_row')}</h2>
             <div class="grid-2">
-              <ha-select
-                .label=${translateEngine(this.hass, 'editor.row_span')}
-                .value=${this.rowSpan}
-                .type=${"rowSpan"}
-                name="rowSpan"
-                @selected=${this._haSelectChanged}
-                @closed=${this._stopPropagation}
-              >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.row')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
-              </ha-select>
-              <ha-select
-                .label=${translateEngine(this.hass, 'editor.col_span')}
-                .value=${this.colSpan}
-                .type=${"colSpan"}
-                name="colSpan"
-                @selected=${this._haSelectChanged}
-                @closed=${this._stopPropagation}
-              >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.column')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
-              </ha-select>
+              <select name="rowSpan" .value=${this.rowSpan} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${translateEngine(this.hass, 'editor.row')}</option>
+                <option value="2">2 ${translateEngine(this.hass, 'editor.rows')}</option>
+              </select>
+              <select name="colSpan" .value=${this.colSpan} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${translateEngine(this.hass, 'editor.column')}</option>
+                <option value="2">2 ${translateEngine(this.hass, 'editor.columns')}</option>
+              </select>
             </div>
 
             <h2>${translateEngine(this.hass, 'editor.large_col_row')}</h2>
             <div class="grid-2">
-              <ha-select
-                .label=${translateEngine(this.hass, 'editor.row_span')}
-                .value=${this.rowSpanLg}
-                .type=${"rowSpanLg"}
-                name="rowSpanLg"
-                @selected=${this._haSelectChanged}
-                @closed=${this._stopPropagation}
-              >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.row')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
-                <ha-list-item value="3">3 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
-              </ha-select>
-              <ha-select
-                .label=${translateEngine(this.hass, 'editor.col_span')}
-                .value=${this.colSpanLg}
-                .type=${"colSpanLg"}
-                name="colSpanLg"
-                @selected=${this._haSelectChanged}
-                @closed=${this._stopPropagation}
-              >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.column')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
-                <ha-list-item value="3">3 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
-              </ha-select>
+              <select name="rowSpanLg" .value=${this.rowSpanLg} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${translateEngine(this.hass, 'editor.row')}</option>
+                <option value="2">2 ${translateEngine(this.hass, 'editor.rows')}</option>
+                <option value="3">3 ${translateEngine(this.hass, 'editor.rows')}</option>
+              </select>
+              <select name="colSpanLg" .value=${this.colSpanLg} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${translateEngine(this.hass, 'editor.column')}</option>
+                <option value="2">2 ${translateEngine(this.hass, 'editor.columns')}</option>
+                <option value="3">3 ${translateEngine(this.hass, 'editor.columns')}</option>
+              </select>
             </div>
 
             <h2>${translateEngine(this.hass, 'editor.extra_large_col_row')}</h2>
             <div class="grid-2">
-              <ha-select
-                .label=${translateEngine(this.hass, 'editor.row_span')}
-                .value=${this.rowSpanXl}
-                .type=${translateEngine(this.hass, 'editor.row_span')}
-                name="rowSpanXl"
-                @selected=${this._haSelectChanged}
-                @closed=${this._stopPropagation}
-              >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.row')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
-                <ha-list-item value="4">3 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
-                <ha-list-item value="4">4 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
-              </ha-select>
-              <ha-select
-                .label=${translateEngine(this.hass, 'editor.col_span')}
-                .value=${this.colSpanXl}
-                .type=${"colSpanXl"}
-                name="colSpanXl"
-                @selected=${this._haSelectChanged}
-                @closed=${this._stopPropagation}
-              >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.column')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
-                <ha-list-item value="3">3 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
-                <ha-list-item value="4">4 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
-              </ha-select>
+              <select name="rowSpanXl" .value=${this.rowSpanXl} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${translateEngine(this.hass, 'editor.row')}</option>
+                <option value="2">2 ${translateEngine(this.hass, 'editor.rows')}</option>
+                <option value="3">3 ${translateEngine(this.hass, 'editor.rows')}</option>
+                <option value="4">4 ${translateEngine(this.hass, 'editor.rows')}</option>
+              </select>
+              <select name="colSpanXl" .value=${this.colSpanXl} @change=${this._haSelectChanged} @click=${this._stopPropagation}>
+                <option value="1">1 ${translateEngine(this.hass, 'editor.column')}</option>
+                <option value="2">2 ${translateEngine(this.hass, 'editor.columns')}</option>
+                <option value="3">3 ${translateEngine(this.hass, 'editor.columns')}</option>
+                <option value="4">4 ${translateEngine(this.hass, 'editor.columns')}</option>
+              </select>
             </div>
 
-            <mwc-formfield .label=${translateEngine(this.hass, 'entity.disable')}>
+            <ha-formfield label=${translateEngine(this.hass, 'entity.disable')}>
               <ha-checkbox
                 @change=${this._disableValueChanged}
                 .checked=${this.disableEntity}
               ></ha-checkbox>
-            </mwc-formfield>
-            <mwc-formfield .label=${translateEngine(this.hass, 'entity.hide')}>
+            </ha-formfield>
+            <ha-formfield label=${translateEngine(this.hass, 'entity.hide')}>
               <ha-checkbox
                 @change=${this._hideValueChanged}
                 .checked=${this.hideEntity}
               ></ha-checkbox>
-            </mwc-formfield>
-            <mwc-formfield .label=${translateEngine(this.hass, 'entity.exclude')}>
+            </ha-formfield>
+            <ha-formfield label=${translateEngine(this.hass, 'entity.exclude')}>
               <ha-checkbox
                 @change=${this._excludeValueChanged}
                 .checked=${this.excludeEntity}
               ></ha-checkbox>
-            </mwc-formfield>
-            <mwc-formfield .label=${translateEngine(this.hass, 'entity.use_entity_card')}>
+            </ha-formfield>
+            <ha-formfield label=${translateEngine(this.hass, 'entity.use_entity_card')}>
               <ha-checkbox
                 @change=${this._customCardValueChanged}
                 .checked=${this.customCard}
               ></ha-checkbox>
-            </mwc-formfield>
-            <mwc-formfield .label=${translateEngine(this.hass, 'entity.use_popup_card')}>
+            </ha-formfield>
+            <ha-formfield label=${translateEngine(this.hass, 'entity.use_popup_card')}>
               <ha-checkbox
                 @change=${this._customPopupValueChanged}
                 .checked=${this.customPopup}
               ></ha-checkbox>
-            </mwc-formfield>
+            </ha-formfield>
 
             <div class="card-footer">
               <ha-button slot="secondaryAction" @click=${(e) => closePopup()}>

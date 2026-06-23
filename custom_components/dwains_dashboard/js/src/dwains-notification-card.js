@@ -91,7 +91,7 @@ class DwainsNotificationCard extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     if (this._unsub) {
-      this._unsub();
+      Promise.resolve(this._unsub()).catch(() => {});
       this._unsub = undefined;
     }
   }

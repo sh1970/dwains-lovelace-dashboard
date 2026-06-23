@@ -21,6 +21,7 @@ import {
 import { computeDomain} from 'custom-card-helpers';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import translateEngine from './translate-engine';
+import { createCardElementSafe } from './helpers';
 
 function getDwainsHass() {
   return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
@@ -975,14 +976,12 @@ function getDwainsHass() {
         return;
       }
 
-      const element = await this.cardHelpers.createCardElement(config);
-      element.hass = this._hass; // Gebruik this._hass, zorg ervoor dat deze correct is ingesteld.
-
-      return element;
+      return createCardElementSafe(this.cardHelpers, config, this._hass);
     }
 
 
     _toggle(ev) {
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const domain = ev.currentTarget.domain;
       if (TOGGLE_DOMAINS.includes(domain)) {
@@ -998,6 +997,7 @@ function getDwainsHass() {
     }
 
     _addLovelaceCard(ev) {
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const area = ev.currentTarget.area;
       const areaName = ev.currentTarget.areaName;
@@ -1016,6 +1016,7 @@ function getDwainsHass() {
     }
 
     _handleAreaEditClick(ev) {
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const areaId = ev.currentTarget.area_id;
       const icon = ev.currentTarget.area_icon;
@@ -1034,6 +1035,7 @@ function getDwainsHass() {
     }
 
     _handleEntityEditClick(ev) {
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const entity = ev.currentTarget.entity;
       const friendlyName = ev.currentTarget.friendlyName;
@@ -1071,6 +1073,7 @@ function getDwainsHass() {
     }
 
     _handleEntityEditBoolValueClick(ev) {
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const entityId = ev.currentTarget.entity;
       const key = ev.currentTarget.key;
@@ -1092,6 +1095,7 @@ function getDwainsHass() {
 
     }
     _handleAreaEditBoolValueClick(ev) {
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const areaId = ev.currentTarget.areaId;
       const key = ev.currentTarget.key;
@@ -1114,6 +1118,7 @@ function getDwainsHass() {
     }
 
     _handleEntityEditCardClick(ev) {
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const entityId = ev.currentTarget.entity;
 
@@ -1138,6 +1143,7 @@ function getDwainsHass() {
     }
 
     _handleEntityEditPopupClick(ev) {
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const entityId = ev.currentTarget.entity;
 
@@ -1162,6 +1168,7 @@ function getDwainsHass() {
     }
 
     _handleEntityAddToFavoritesClick(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const entityId = ev.currentTarget.entity;
 
@@ -1180,6 +1187,7 @@ function getDwainsHass() {
     }
 
     _handleEntityRemoveFromFavoritesClick(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const entityId = ev.currentTarget.entity;
 
@@ -1200,6 +1208,7 @@ function getDwainsHass() {
 
 
     _handleDwainsDashboardSettingsClick(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       //console.log('disableSensorGraph', this.configuration['homepage_header']['disable_sensor_graph']);
       const disableClock = ev.currentTarget.disableClock;
@@ -1227,6 +1236,7 @@ function getDwainsHass() {
     }
 
     _handleAreaViewDisplayGroupedClicked(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
 
       const value = ev.currentTarget.value;
@@ -1235,6 +1245,7 @@ function getDwainsHass() {
     }
 
     _handleAreaDisplayGroupedClicked(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
 
       const value = ev.currentTarget.value;
@@ -1243,6 +1254,7 @@ function getDwainsHass() {
     }
 
     _handleFavoriteEditModeClicked(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const value = ev.currentTarget.value;
 
@@ -1280,6 +1292,7 @@ function getDwainsHass() {
     }
 
     _handleAreaEditModeClicked(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const value = ev.currentTarget.value;
 
@@ -1318,6 +1331,7 @@ function getDwainsHass() {
     }
 
     _handleAreaViewEditModeClicked(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const value = ev.currentTarget.value;
 
@@ -1355,6 +1369,7 @@ function getDwainsHass() {
     }
 
     _handleCustomCardEditClick(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const areaId = ev.currentTarget.area_id;
       const filename = ev.currentTarget.filename;
@@ -1779,7 +1794,7 @@ function getDwainsHass() {
               absolute
             >
               <ha-icon-button
-                .label=${this._hass.localize("ui.common.overflow_menu")}
+                label=${this._hass.localize("ui.common.overflow_menu")}
                 .path=${mdiDotsVertical}
                 slot="trigger"
               ></ha-icon-button>
@@ -1971,7 +1986,7 @@ function getDwainsHass() {
                   absolute
                 >
                   <ha-icon-button
-                    .label=${this._hass.localize("ui.common.overflow_menu")}
+                    label=${this._hass.localize("ui.common.overflow_menu")}
                     .path=${mdiDotsVertical}
                     slot="trigger"
                   ></ha-icon-button>
@@ -2138,7 +2153,7 @@ function getDwainsHass() {
               absolute
             >
               <ha-icon-button
-                .label=${this._hass.localize("ui.common.overflow_menu")}
+                label=${this._hass.localize("ui.common.overflow_menu")}
                 .path=${mdiDotsVertical}
                 slot="trigger"
               ></ha-icon-button>
@@ -2232,7 +2247,7 @@ function getDwainsHass() {
                 absolute
               >
                 <ha-icon-button
-                  .label=${this._hass.localize("ui.common.overflow_menu")}
+                  label=${this._hass.localize("ui.common.overflow_menu")}
                   .path=${mdiDotsVertical}
                   slot="trigger"
                 ></ha-icon-button>
@@ -2400,7 +2415,7 @@ function getDwainsHass() {
                         absolute
                       >
                         <ha-icon-button
-                          .label=${this._hass.localize("ui.common.overflow_menu")}
+                          label=${this._hass.localize("ui.common.overflow_menu")}
                           .path=${mdiDotsVertical}
                           slot="trigger"
                         ></ha-icon-button>

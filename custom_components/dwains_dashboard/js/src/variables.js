@@ -48,7 +48,7 @@ export const OTHER_DOMAINS = ["vacuum", "media_player", "lock"];
 
 export const DEVICE_CLASSES = {
     sensor: ["temperature", "humidity"],
-    binary_sensor: ["motion", "door", "window", "vibration", "moisture", "smoke", "running"],
+    binary_sensor: ["motion", "occupancy", "presence", "door", "window", "vibration", "moisture", "smoke", "running"],
     cover: ["garage","shutter"],
   };
 
@@ -63,6 +63,8 @@ export const DOMAIN_STATE_ICONS = {
     sensor: { humidity: "mdi:water-percent", temperature: "mdi:thermometer" },
     binary_sensor: {
       motion: "mdi:motion-sensor",
+      occupancy: "mdi:home-account",
+      presence: "mdi:motion-sensor",
       door: "mdi:door-open",
       window: "mdi:window-open-variant",
       vibration: "mdi:vibrate",
@@ -90,6 +92,8 @@ export const DOMAIN_STATE_ICONS = {
     temperature: "mdi:thermometer",
     binary_sensor: "mdi:radiobox-blank",
     motion: "mdi:motion-sensor",
+    occupancy: "mdi:home-account",
+    presence: "mdi:motion-sensor",
     door: "mdi:door-open",
     window: "mdi:window-open-variant",
     vibration: "mdi:vibrate",

@@ -95,15 +95,59 @@ class DwainsHouseInformationCard extends LitElement {
       .badge-icon {
         color: var(--dwains-house-information-badge-color, var(--ha-card-background, var(--card-background-color, white) ) );
       }
-
-      paper-tabs {
+      .dd-header-tabs {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
         height: 110px;
-        margin: 0 0.25rem;
+        padding: 4px 8px;
+        margin: 0 .25rem;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        background: rgba(var(--rgb-card-background-color), .08);
+        border-radius: 12px;
       }
-      paper-tabs paper-tab {
-        float: left;
-        padding: 1.5rem 1.5rem;
+      .dd-header-tabs::-webkit-scrollbar {
+        display: none;
       }
+      .dd-header-tab {
+        display: flex;
+        flex: 1 1 0;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-width: 60px;
+        max-width: 88px;
+        padding: 0 4px;
+      }
+      .dd-header-tabs h3 {
+        max-width: 100%;
+        margin: 10px 0 2px;
+        overflow: hidden;
+        font-size: 1rem;
+        font-weight: 500;
+        line-height: 1.3;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .dd-header-tabs span {
+        font-size: .92rem;
+        line-height: 1.25;
+      }
+      @media (max-width: 600px) {
+        .dd-header-tabs {
+          gap: 6px;
+          padding-inline: 6px;
+        }
+        .dd-header-tab {
+          flex: 0 0 auto;
+          min-width: 68px;
+        }
+      }
+
       .loading-component {
         height: 110px;
       }
@@ -198,14 +242,17 @@ class DwainsHouseInformationCard extends LitElement {
                     // or linked to a device linked to this area.
                     for (const entity of this.entities) {
                         if (
+                            !entity.hidden_by && (
                             entity.area_id
                                 ? entity.area_id === area.area_id
                                 : areaDevices.has(entity.device_id)
+                            )
                         ) {
                             const disableEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['disabled'] ? true : false) : false;
                             const excludeEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['excluded'] ? true : false) : false;
+                            const hideEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['hidden'] ? true : false) : false;
 
-                            if (!disableEntity && !excludeEntity) {
+                            if (!disableEntity && !excludeEntity && !hideEntity) {
                                 const friendlyName = this.configuration['entities'][entity.entity_id] ? this.configuration['entities'][entity.entity_id]['friendly_name'] : "";
                                 const domain = computeDomain(entity.entity_id);
 
@@ -244,13 +291,23 @@ class DwainsHouseInformationCard extends LitElement {
         } else {
             const domain = ev.currentTarget.domain;
             const deviceClass = ev.currentTarget.deviceClass;
+            const configured = this.domains?.[domain]?.entities;
+            const entities = domain === 'climate' && (!configured || configured.length === 0)
+                ? Object.keys(this._hass.states)
+                    .filter((entityId) => entityId.startsWith('climate.'))
+                    .map((entityId) => ({
+                        entity_id: entityId,
+                        area: {},
+                        friendlyName: this._hass.states[entityId]?.attributes?.friendly_name || entityId,
+                    }))
+                : (configured || []);
             window.setTimeout(() => {
                 fireEvent("hass-more-info", { entityId: "" }, document.querySelector("home-assistant"));
                 popUp(translateEngine(this._hass, 'device.' + domain), {
                     type: "custom:dwains-house-information-more-info-card",
                     domain: domain,
-                    entities: this.domains[domain]['entities'],
-                    deviceClass: deviceClass,
+                    entities: entities,
+                    deviceClass: domain === 'climate' ? '' : deviceClass,
                 }, true, '');
             }, 50);
         }
@@ -267,9 +324,13 @@ class DwainsHouseInformationCard extends LitElement {
                 )
                 : entities
         ).filter(
-            (entity) =>
-                !UNAVAILABLE_STATES.includes(entity.state) &&
-                !STATES_OFF.includes(entity.state)
+            (entity) => {
+                const config = this.configuration?.entities?.[entity.entity_id];
+                return !entity.hidden_by &&
+                    !(config?.disabled || config?.excluded || config?.hidden) &&
+                    !UNAVAILABLE_STATES.includes(entity.state) &&
+                    !STATES_OFF.includes(entity.state);
+            }
         ).length);
     }
 
@@ -396,7 +457,7 @@ class DwainsHouseInformationCard extends LitElement {
 
         }
         return html`
-      <paper-tab>
+      <div class="dd-header-tab">
         <div class="text-center cursor-pointer domain-badge-card" .domain=${domain} .deviceClass=${deviceClass} @click=${this._handleMoreInfo}>
           <div class="rounded-full flex items-center justify-center m-auto round-badge" style="width: 50px; height: 50px;">
             <div class="">
@@ -411,7 +472,7 @@ class DwainsHouseInformationCard extends LitElement {
           ${count} ${translatedStatus}
           </span>
         </div>
-      </paper-tab>
+      </div>
       `;
     }
 
@@ -426,7 +487,7 @@ class DwainsHouseInformationCard extends LitElement {
             }
             const name = (stateObj.attributes.friendly_name === undefined ? (stateObj.entity_id).replace(/_/g, " ") : stateObj.attributes.friendly_name);
             return html`
-                <paper-tab>
+                <div class="dd-header-tab">
                 <div class="text-center cursor-pointer" .entity=${entity_id} @click=${this._handleMoreInfo}>
                     ${imageUrl ? html`
                     <img src="${imageUrl}" width="50" class="rounded-full m-auto ${stateObj.state}">
@@ -449,7 +510,7 @@ class DwainsHouseInformationCard extends LitElement {
                     )}
                     </span>
                 </div>
-                </paper-tab>`;
+                </div>`;
         }
     }
 
@@ -462,10 +523,10 @@ class DwainsHouseInformationCard extends LitElement {
         } else {
             return html`
                 <ha-card>
-                <paper-tabs selected="0" scrollable hide-scroll-buttons>
+                <div class="dd-header-tabs">
                     ${this.persons.map((entity) => this._renderPersonCard(entity))}
                     ${Object.values(this.domains).map((domain) => this._renderDomain(domain))}
-                </paper-tabs>
+                </div>
                 </ha-card>
             `;
         }
