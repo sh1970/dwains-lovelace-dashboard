@@ -1,6 +1,11 @@
 const path = require('path');
 
 module.exports = {
+  resolve: {
+    alias: {
+      'card-tools/src/hass$': path.resolve(__dirname, 'src/hass-compat.js')
+    }
+  },
   entry: [
     './src/dwains-runtime-fixes.js',
     './src/dwains-navigation-card.js',

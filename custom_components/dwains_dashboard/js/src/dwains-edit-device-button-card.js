@@ -5,17 +5,30 @@ import { closePopup } from "./helpers";
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  const cardHelpers = await window.loadCardHelpers();
+  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
 
 
     class DwainsEditDeviceButtonCard extends LitElement {
       static get styles() {
         return [
           css`
-          .edit-element {
-            padding: 20px;
-          }
+        .edit-element {
+          padding: 20px;
+          max-width: 460px;
+          margin-right: auto;
+          margin-left: auto;
+        }
+        .edit-element ha-icon-picker, .edit-element ha-textfield, .edit-element ha-select, .edit-element ha-entity-picker {
+          display: block;
+          margin: .8rem 0;
+        }
+        .edit-element ha-formfield {
+          display: flex;
+          align-items: center;
+          gap: .6rem;
+          margin: .9rem 0;
+          padding-inline-start: .25rem;
+        }
           .add-button {
             font-size: 16px;
             border: 2px solid #4591B8;
@@ -25,9 +38,11 @@ Promise.race(bases2).then(async () => {
             border-radius: 20px;
             color: white;
           }
-          .card-footer {
-            display: flex;
-            justify-content: flex-end;
+        .card-footer {
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+          gap: .75rem;
             padding: 8px;
             border-top: 1px solid var(--divider-color);
           }
@@ -69,6 +84,7 @@ Promise.race(bases2).then(async () => {
         this.showInNavbar = ev.target.checked;
       }
       _saveButton(ev){
+        if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
         ev.stopPropagation();
 
         if(this.showInNavbar && !this.icon){
@@ -95,17 +111,18 @@ Promise.race(bases2).then(async () => {
         return html`
         <div class="edit-element">
             <ha-icon-picker
-              .label=${translateEngine(this.hass, 'device.icon')}
+              label=${translateEngine(this.hass, 'device.icon')}
               .value=${this.icon}
               @value-changed=${this._iconPickerChange}
             ></ha-icon-picker>
 
-            <ha-formfield .label=${translateEngine(this.hass,'device.show_in_navbar')}>
+          <ha-formfield>
               <ha-switch
                 @change=${this._showInMainNavbarValueChanged}
                 .checked=${this.showInNavbar}
               ></ha-switch>
-            </ha-formfield>
+            <span slot="label">${translateEngine(this.hass,'device.show_in_navbar')}</span>
+          </ha-formfield>
 
             <div class="card-footer">
               <ha-button slot="secondaryAction" @click=${(e) => closePopup()}>

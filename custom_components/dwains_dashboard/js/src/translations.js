@@ -127,6 +127,8 @@ const translations = {
             window: 'Window',
             vibration: 'Vibration',
             motion: 'Motion',
+            occupancy: 'Occupancy',
+            presence: 'Presence',
             device_tracker: 'Device tracker',
             lock: 'Lock',
             input_boolean: 'Input boolean',

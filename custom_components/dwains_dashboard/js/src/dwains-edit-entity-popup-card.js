@@ -8,8 +8,7 @@ import { closePopup } from "./helpers";
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  const cardHelpers = await window.loadCardHelpers();
+  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
 
 
 
@@ -38,6 +37,8 @@ Promise.race(bases2).then(async () => {
         .card-footer {
           display: flex;
           justify-content: flex-end;
+          align-items: center;
+          gap: .75rem;
           padding: 8px;
           border-top: 1px solid var(--divider-color);
         }
@@ -300,7 +301,7 @@ Promise.race(bases2).then(async () => {
       }
       if(this.mode == 'pre-select') {
         return html`
-          <mwc-list>
+          <ha-md-list>
             <ha-list-item twoline .mode=${"hui-card-picker"} @click=${this._switchMode}>
               ${translateEngine(this.hass, 'editor.lovelace_card')}
               <span slot="secondary">
@@ -315,7 +316,7 @@ Promise.race(bases2).then(async () => {
               </span>
               <ha-icon-next slot="meta"></ha-icon-next
             ></ha-list-item>
-          </mwc-list>
+          </ha-md-list>
         `;
       }
       if(this.mode == 'dwains-dashboard-blueprint-select'){
@@ -394,7 +395,7 @@ Promise.race(bases2).then(async () => {
           <p>${translateEngine(this.hass, 'blueprint.instruction')}</p>
           <a href="https://github.com/dwainscheeren/dwains-dashboard-blueprints" target="_blank">Dwains Dashboard Blueprints Github</a>
           <ha-yaml-editor
-            .label=${translateEngine(this.hass, 'blueprint.yaml_code')}
+            label=${translateEngine(this.hass, 'blueprint.yaml_code')}
             name="description"
             @value-changed=${this._installBlueprintYamlChanged}
           ><ha-code-editor mode="yaml" autocomplete-entities="" autocomplete-icons="" dir="ltr"></ha-code-editor></ha-yaml-editor>

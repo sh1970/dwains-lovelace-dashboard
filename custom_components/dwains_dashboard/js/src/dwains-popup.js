@@ -40,21 +40,59 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
 
         closeDialog() {
           this.open = false;
+          try {
+            if(history.state && history.state.cardToolsPopup){
+              history.replaceState({cardToolsPopup: false}, "");
+            }
+          } catch (_) {}
         }
 
         async _makeCard() {
-          const helpers = await window.loadCardHelpers();
-          this.card = await helpers.createCardElement(this._card);
-          this.card.hass = this.hass;
-          this.requestUpdate();
+          const helpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
+          this.card = null;
+          try {
+            this.card = await helpers.createCardElement(this._card);
+          } catch (_) {}
+          if(!this.card || typeof this.card.setConfig !== "function" || this.card.localName === "hui-error-card" || this.card._config?.type === "error"){
+            try {
+              const tag = (this._card?.type || "").replace(/^custom:/, "");
+              const usable = (ctor) => Boolean(ctor?.prototype && typeof ctor.prototype.setConfig === "function");
+              const base = (usable(window.__dd_orig?.[tag]) && window.__dd_orig[tag])
+                || (usable(window.__dd_ctors?.[tag]) && window.__dd_ctors[tag])
+                || (usable(customElements.get(tag)) && customElements.get(tag));
+              let element;
+              if(base){
+                const fixedTag = `${tag}-ddfix`;
+                if(!customElements.get(fixedTag)) customElements.define(fixedTag, class extends base {});
+                element = document.createElement(fixedTag);
+              }
+              if(!element || typeof element.setConfig !== "function"){
+                element = document.createElement(tag);
+                if(customElements.upgrade) customElements.upgrade(element);
+              }
+              if(typeof element.setConfig === "function"){
+                element.setConfig(this._card);
+                this.card = element;
+              }
+            } catch (_) {}
+          }
+          if(this.card){
+            this.card.hass = this.hass;
+            this.requestUpdate();
+          }
         }
 
         async _applyStyles() {
           let el = await selectTree(this, "$ ha-dialog");
           customElements.whenDefined("card-mod").then(async () => {
           if(!el) return;
-            const cm = customElements.get("card-mod");
-            cm.applyToElement(el, "more-info", this._style, {config: this._card}, [], false);
+            const cm = window.cardMod || customElements.get("card-mod");
+            if(!cm || typeof cm.applyToElement !== "function") return;
+            if(cm.applyToElement.length <= 3){
+              cm.applyToElement(el, this._style, {config: this._card, tag: "more-info"});
+            } else {
+              cm.applyToElement(el, "more-info", this._style, {config: this._card}, [], false);
+            }
           });
 
         }
@@ -92,14 +130,14 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
               ? html`<div slot="heading"></div>`
               : html`
                 <app-toolbar slot="heading">
-                  <mwc-icon-button
-                    .label=${"dismiss"}
+                  <ha-icon-button
+                    label=${"dismiss"}
                     dialogAction="cancel"
                   >
                     <ha-icon
                       .icon=${"mdi:close"}
                     ></ha-icon>
-                  </mwc-icon-button>
+                  </ha-icon-button>
                   <div class="main-title" @click=${this._enlarge}>
                     ${this.title}
                   </div>
@@ -116,7 +154,7 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
           return css`
           ha-dialog {
             --mdc-dialog-min-width: 400px;
-            --mdc-dialog-max-width: 600px;
+            --mdc-dialog-max-width: min(95vw, 960px);
             --mdc-dialog-heading-ink-color: var(--primary-text-color);
             --mdc-dialog-content-ink-color: var(--primary-text-color);
             --justify-action-buttons: space-between;

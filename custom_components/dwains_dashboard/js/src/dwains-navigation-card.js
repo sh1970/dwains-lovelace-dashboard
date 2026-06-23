@@ -111,6 +111,15 @@ class DwainsNavigationCard extends LitElement {
         this.isLoading = true; // Start met laden aangeven
       }
 
+      disconnectedCallback() {
+        super.disconnectedCallback();
+        if(this._unsub){
+          Promise.resolve(this._unsub()).catch(() => {});
+          this._unsub = undefined;
+        }
+        this.isLoading = true;
+      }
+
 
       async loadConfig() {
         if (this._hass) {
@@ -120,7 +129,9 @@ class DwainsNavigationCard extends LitElement {
             });
             this.isLoading = false; // Configuratie is geladen
             this.requestUpdate(); // Vraag een update van de render-functie aan
-            await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_navigation_card_reload");
+            if(!this._unsub){
+              this._unsub = await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_navigation_card_reload");
+            }
           } catch (error) {
             console.error('Error loading configuration:', error);
             this.isLoading = false;

@@ -5,8 +5,7 @@ import { closePopup } from "./helpers";
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  const cardHelpers = await window.loadCardHelpers();
+  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
 
 
 
@@ -160,6 +159,7 @@ Promise.race(bases2).then(async () => {
     }
 
     _saveButton(ev){
+      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       this.hass.connection.sendMessagePromise({
         type: 'dwains_dashboard/edit_homepage_header',
@@ -237,14 +237,14 @@ Promise.race(bases2).then(async () => {
 	          <div class="field-stack">
 	            <ha-entity-picker
 	              .hass=${this.hass}
-	              .label=${translateEngine(this.hass, 'global.weather_entity')}
+	              label=${translateEngine(this.hass, 'global.weather_entity')}
 	              .value=${this.weatherEntity}
 	              .includeDomains=${["weather"]}
 	              @value-changed=${this._weatherEntityPicked}
 	            ></ha-entity-picker>
 	            <ha-entity-picker
 	              .hass=${this.hass}
-	              .label=${translateEngine(this.hass, 'global.alarm_entity')}
+	              label=${translateEngine(this.hass, 'global.alarm_entity')}
 	              .includeDomains=${["alarm_control_panel"]}
 	              .value=${this.alarmEntity}
 	              @value-changed=${this._alarmEntityPicked}

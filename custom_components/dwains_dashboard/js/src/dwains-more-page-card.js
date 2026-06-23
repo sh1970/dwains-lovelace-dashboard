@@ -87,7 +87,17 @@ class MorePageCard extends LitElement {
 
         await this._loadData(); //Load data
 
-        await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_more_pages_reload");
+        if(!this._unsub){
+            this._unsub = await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_more_pages_reload");
+        }
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if(this._unsub){
+            Promise.resolve(this._unsub()).catch(() => {});
+            this._unsub = undefined;
+        }
     }
 
     async _reloadCard() {
@@ -161,7 +171,7 @@ class MorePageCard extends LitElement {
                   absolute
                 >
                   <ha-icon-button
-                    .label=${this._hass.localize("ui.common.overflow_menu")}
+                    label=${this._hass.localize("ui.common.overflow_menu")}
                     .path=${mdiDotsVertical}
                     slot="trigger"
                   ></ha-icon-button>

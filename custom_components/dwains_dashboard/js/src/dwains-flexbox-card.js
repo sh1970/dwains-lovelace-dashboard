@@ -1,6 +1,6 @@
 const bases = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases).then(async () => {
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise(resolve => setTimeout(resolve, 0));
   const LitElement = customElements.get('hui-masonry-view')
     ? Object.getPrototypeOf(customElements.get('hui-masonry-view'))
     : Object.getPrototypeOf(customElements.get('hc-lovelace'));

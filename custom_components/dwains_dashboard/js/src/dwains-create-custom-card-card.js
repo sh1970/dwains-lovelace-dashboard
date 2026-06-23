@@ -5,8 +5,7 @@ import { closePopup } from "./helpers";
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  const cardHelpers = await window.loadCardHelpers();
+  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
 
   class DwainsCreateCustomCardCard extends LitElement {
     static get styles() {
@@ -27,6 +26,8 @@ Promise.race(bases2).then(async () => {
         .card-footer {
           display: flex;
           justify-content: flex-end;
+          align-items: center;
+          gap: .75rem;
           padding: 8px;
           border-top: 1px solid var(--divider-color);
         }
@@ -111,7 +112,7 @@ Promise.race(bases2).then(async () => {
           grid-template-columns: repeat(2,minmax(0,1fr));
           gap: 1rem;
         }
-        ha-select, ha-textfield, mwc-formfield {
+        ha-select, ha-textfield, ha-formfield {
           width: 100%;
         }
         h2,h3 {
@@ -198,7 +199,11 @@ Promise.race(bases2).then(async () => {
     magicStuffSecond(ev){
       //console.log(ev);
     }
-    _sendCard(){
+  _sendCard(){
+      this.shadowRoot?.querySelectorAll("ha-select").forEach((select) => {
+        const key = select.name || select.type;
+        if(key && select.value !== undefined) this[key] = `${select.value}`;
+      });
       const cardData = JSON.stringify(this.cardConfig);
       this.hass.connection.sendMessagePromise({
         type: 'dwains_dashboard/add_card',
@@ -302,8 +307,18 @@ Promise.race(bases2).then(async () => {
     }
     _haSelectChanged(ev) {
       ev.stopPropagation();
-      const type = ev.target.type;
-      this[type] = ev.target.value;
+      const target = ev.currentTarget || ev.target;
+      const type = target?.type || target?.name || target?.dataset?.field;
+      let value = ev.detail?.value;
+      if(value === undefined && ev.detail?.index !== undefined){
+        value = target?.children?.[ev.detail.index]?.value ?? target?.items?.[ev.detail.index]?.value;
+      }
+      value ??= ev.target !== target ? ev.target?.value : undefined;
+      value ??= target?.value ?? target?.selectedValue ?? target?._value;
+      if(type && value !== undefined){
+        this[type] = `${value}`;
+        this.requestUpdate();
+      }
     }
     _stopPropagation(ev){
       ev.stopPropagation();
@@ -337,7 +352,7 @@ Promise.race(bases2).then(async () => {
       }
       if(this.mode == 'pre-select') {
         return html`
-          <mwc-list>
+          <ha-md-list>
             <ha-list-item twoline .mode=${"hui-card-picker"} @click=${this._switchMode}>
               ${translateEngine(this.hass, 'editor.lovelace_card')}
               <span slot="secondary">
@@ -352,7 +367,7 @@ Promise.race(bases2).then(async () => {
               </span>
               <ha-icon-next slot="meta"></ha-icon-next
             ></ha-list-item>
-          </mwc-list>
+          </ha-md-list>
         `;
       }
       if(this.mode == 'dwains-dashboard-blueprint-select'){
@@ -431,7 +446,7 @@ Promise.race(bases2).then(async () => {
           <p>${translateEngine(this.hass, 'blueprint.instruction')}</p>
           <a href="https://github.com/dwainscheeren/dwains-dashboard-blueprints" target="_blank">Dwains Dashboard Blueprints Github</a>
           <ha-yaml-editor
-            .label=${translateEngine(this.hass, 'blueprint.yaml_code')}
+            label=${translateEngine(this.hass, 'blueprint.yaml_code')}
             name="description"
             @value-changed=${this._installBlueprintYamlChanged}
           ><ha-code-editor mode="yaml" autocomplete-entities="" autocomplete-icons="" dir="ltr"></ha-code-editor></ha-yaml-editor>
@@ -467,7 +482,7 @@ Promise.race(bases2).then(async () => {
             <h2>${translateEngine(this.hass, 'editor.default_col_row')}</h2>
             <div class="grid-2">
               <ha-select
-                .label=${translateEngine(this.hass, 'editor.row_span')}
+                label=${translateEngine(this.hass, 'editor.row_span')}
                 .value=${this.rowSpan}
                 .type=${"rowSpan"}
                 name="rowSpan"
@@ -478,7 +493,7 @@ Promise.race(bases2).then(async () => {
                 <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
               </ha-select>
               <ha-select
-                .label=${translateEngine(this.hass, 'editor.col_span')}
+                label=${translateEngine(this.hass, 'editor.col_span')}
                 .value=${this.colSpan}
                 .type=${"colSpan"}
                 name="colSpan"
@@ -493,7 +508,7 @@ Promise.race(bases2).then(async () => {
             <h2>${translateEngine(this.hass, 'editor.large_col_row')}</h2>
             <div class="grid-2">
               <ha-select
-                .label=${translateEngine(this.hass, 'editor.row_span')}
+                label=${translateEngine(this.hass, 'editor.row_span')}
                 .value=${this.rowSpanLg}
                 .type=${"rowSpanLg"}
                 name="rowSpanLg"
@@ -505,7 +520,7 @@ Promise.race(bases2).then(async () => {
                 <ha-list-item value="3">3 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
               </ha-select>
               <ha-select
-                .label=${translateEngine(this.hass, 'editor.col_span')}
+                label=${translateEngine(this.hass, 'editor.col_span')}
                 .value=${this.colSpanLg}
                 .type=${"colSpanLg"}
                 name="colSpanLg"
@@ -521,7 +536,7 @@ Promise.race(bases2).then(async () => {
             <h2>${translateEngine(this.hass, 'editor.extra_large_col_row')}</h2>
             <div class="grid-2">
               <ha-select
-                .label=${translateEngine(this.hass, 'editor.row_span')}
+                label=${translateEngine(this.hass, 'editor.row_span')}
                 .value=${this.rowSpanXl}
                 .type=${"rowSpanXl"}
                 name="rowSpanXl"
@@ -534,7 +549,7 @@ Promise.race(bases2).then(async () => {
                 <ha-list-item value="4">4 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
               </ha-select>
               <ha-select
-                .label=${translateEngine(this.hass, 'editor.col_span')}
+                label=${translateEngine(this.hass, 'editor.col_span')}
                 .value=${this.colSpanXl}
                 .type=${"colSpanXl"}
                 name="colSpanXl"

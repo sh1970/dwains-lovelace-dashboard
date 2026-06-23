@@ -29,6 +29,9 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
             display: grid;
             gap: 1rem;
         }
+        .cards.single-card-section > * {
+            grid-column: 1 / -1;
+        }
         @media (min-width: 1024px) {
             .lg-grid-cols-3 {
                 grid-template-columns: repeat(3, minmax(0, 1fr))
@@ -196,11 +199,8 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
                     isOn = true;
                 }
 
-                // Speciale controle voor het climate domein
-                if (stateObj.entity_id.startsWith("climate.")) {
-                    const hvacAction = stateObj.attributes.hvac_action;
-                    isOn = hvacAction && hvacAction !== "off" && hvacAction !== "idle";
-                }
+                // Do not gate climate cards on hvac_action: an enabled unit may
+                // legitimately be idle and must still be visible in the popup.
 
                 // if (isOn) {
                 //     const card = await this.createEntityCard(entityConfig.entity_id, entityConfig.friendlyName);
@@ -256,7 +256,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
             case "camera":
                 cardConfig = {
                 type: "picture-entity",
-                camera_view: "live"
+                camera_view: "auto"
                 };
                 rowSpan = "2";
                 colSpan = "2";
@@ -438,7 +438,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
                 ${Object.entries(this.areas).map(([areaId, area]) => html`
                     <div class="area mb-5" id="area-${areaId}">
                         <h3 class="font-semibold capitalize text-gray">${area.name}</h3>
-                        <div class="cards grid grid-flow-row-dense grid-cols-2 lg-grid-cols-3 xl-grid-cols-4 gap-4">
+                        <div class="cards grid grid-flow-row-dense grid-cols-2 ${area.cards.length === 1 ? 'single-card-section' : ''} gap-4">
                             ${area.cards.map(card => html`${card}`)}
                         </div>
                     </div>

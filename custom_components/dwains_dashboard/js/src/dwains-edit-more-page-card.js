@@ -10,6 +10,20 @@ class DwainsEditMorePageCard extends LitElement {
         css`
         .edit-element {
         padding: 20px;
+        max-width: 460px;
+        margin-right: auto;
+        margin-left: auto;
+        }
+        .edit-element ha-icon-picker, .edit-element ha-textfield, .edit-element ha-select, .edit-element ha-entity-picker {
+        display: block;
+        margin: .8rem 0;
+        }
+        .edit-element ha-formfield {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        margin: .9rem 0;
+        padding-inline-start: .25rem;
         }
         h1, h2, h3, h4, h5, h6 {
         font-size: inherit;
@@ -27,8 +41,10 @@ class DwainsEditMorePageCard extends LitElement {
         color: white;
         }
         .card-footer {
-        display: flex;
-        justify-content: flex-end;
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+          gap: .75rem;
         padding: 8px;
         border-top: 1px solid var(--divider-color);
         }
@@ -329,7 +345,7 @@ class DwainsEditMorePageCard extends LitElement {
 
     if(this.mode == 'pre-select') {
         return html`
-        <mwc-list>
+        <ha-md-list>
             <ha-list-item twoline .mode=${"hui-card-picker"} @click=${this._switchMode}>
             ${translateEngine(this._hass, 'editor.lovelace_card')}
             <span slot="secondary">
@@ -344,7 +360,7 @@ class DwainsEditMorePageCard extends LitElement {
             </span>
             <ha-icon-next slot="meta"></ha-icon-next
             ></ha-list-item>
-        </mwc-list>
+        </ha-md-list>
         `;
     }
     if(this.mode == 'dwains-dashboard-blueprint-select'){
@@ -423,7 +439,7 @@ class DwainsEditMorePageCard extends LitElement {
         <p>${translateEngine(this._hass, 'blueprint.instruction')}</p>
         <a href="https://github.com/dwainscheeren/dwains-dashboard-blueprints" target="_blank">Dwains Dashboard Blueprints Github</a>
         <ha-yaml-editor
-            .label=${translateEngine(this._hass, 'blueprint.yaml_code')}
+            label=${translateEngine(this._hass, 'blueprint.yaml_code')}
             name="description"
             @value-changed=${this._installBlueprintYamlChanged}
         ><ha-code-editor mode="yaml" autocomplete-entities="" autocomplete-icons="" dir="ltr"></ha-code-editor></ha-yaml-editor>
@@ -452,23 +468,24 @@ class DwainsEditMorePageCard extends LitElement {
         <div class="edit-element">
             <div class="more-page-settings">
             <ha-textfield
-                .label=${translateEngine(this._hass, 'more.name')}
+                label=${translateEngine(this._hass, 'more.name')}
                 .name=${translateEngine(this._hass, 'more.name')}
                 .value=${this.name}
                 .style=${"width: 100%"}
                 @input=${this._nameChanged}
             ></ha-textfield>
             <ha-icon-picker
-                .label=${translateEngine(this._hass,'more.icon')}
+                label=${translateEngine(this._hass,'more.icon')}
                 .value=${this.icon}
                 @value-changed=${this._iconPickerChange}
             ></ha-icon-picker>
-            <mwc-formfield .label=${translateEngine(this._hass,'more.add_navbar')}>
+            <ha-formfield>
                 <ha-checkbox
                 @change=${this._showInMainNavbarValueChanged}
                 .checked=${this.showInNavbar}
                 ></ha-checkbox>
-            </mwc-formfield>
+              <span slot="label">${translateEngine(this._hass,'more.add_navbar')}</span>
+            </ha-formfield>
             </div>
 
             <hui-card-element-editor

@@ -672,6 +672,7 @@ function getDwainsHass() {
         }
 
         _toggle(ev) {
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;
           if (TOGGLE_DOMAINS.includes(domain)) {
@@ -687,6 +688,7 @@ function getDwainsHass() {
         }
 
         _addLovelaceCard(ev) {
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;
           const position = ev.currentTarget.position;
@@ -703,6 +705,7 @@ function getDwainsHass() {
         }
 
         _handleEntityEditClick(ev) {
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const entity = ev.currentTarget.entity;
           const friendlyName = ev.currentTarget.friendlyName;
@@ -740,6 +743,7 @@ function getDwainsHass() {
 
 
         _handleEntityEditCardClick(ev) {
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const entityId = ev.currentTarget.entity;
 
@@ -764,6 +768,7 @@ function getDwainsHass() {
         }
 
         _handleEntityEditPopupClick(ev) {
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const entityId = ev.currentTarget.entity;
 
@@ -790,6 +795,7 @@ function getDwainsHass() {
         }
 
         _handleDeviceEditClick(ev) {
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const device = ev.currentTarget.device;
           const icon = ev.currentTarget.device_icon;
@@ -806,6 +812,7 @@ function getDwainsHass() {
         }
 
         _handleCustomCardEditClick(ev){
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;
           const filename = ev.currentTarget.filename;
@@ -857,6 +864,7 @@ function getDwainsHass() {
         }
 
         _handleEntityEditBoolValueClick(ev) {
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const entityId = ev.currentTarget.entity;
           const key = ev.currentTarget.key;
@@ -878,6 +886,7 @@ function getDwainsHass() {
         }
 
         _handleDeviceEditBoolValueClick(ev) {
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const device = ev.currentTarget.device;
           const key = ev.currentTarget.key;
@@ -899,6 +908,7 @@ function getDwainsHass() {
         }
 
         _handleDeviceEditCardClick(ev) {
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;
 
@@ -925,6 +935,7 @@ function getDwainsHass() {
         }
 
         _handleDeviceEditPopupClick(ev) {
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;
 
@@ -965,6 +976,7 @@ function getDwainsHass() {
           );
         }
         _handleDeviceEditModeClicked(ev){
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const value = ev.currentTarget.value;
 
@@ -986,6 +998,7 @@ function getDwainsHass() {
         }
 
         _handleDeviceViewEditModeClicked(ev){
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const value = ev.currentTarget.value;
 
@@ -1092,7 +1105,7 @@ function getDwainsHass() {
                       absolute
                     >
                       <ha-icon-button
-                        .label=${this._hass.localize("ui.common.overflow_menu")}
+                        label=${this._hass.localize("ui.common.overflow_menu")}
                         .path=${mdiDotsVertical}
                         slot="trigger"
                       ></ha-icon-button>
@@ -1255,7 +1268,7 @@ function getDwainsHass() {
                   absolute
                 >
                   <ha-icon-button
-                    .label=${this._hass.localize("ui.common.overflow_menu")}
+                    label=${this._hass.localize("ui.common.overflow_menu")}
                     .path=${mdiDotsVertical}
                     slot="trigger"
                   ></ha-icon-button>
@@ -1389,6 +1402,7 @@ function getDwainsHass() {
 
 
         _handleDeviceViewDisplayGroupedClicked(ev){
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
 
           const value = ev.currentTarget.value;
@@ -1456,7 +1470,7 @@ function getDwainsHass() {
                       absolute
                     >
                       <ha-icon-button
-                        .label=${this._hass.localize("ui.common.overflow_menu")}
+                        label=${this._hass.localize("ui.common.overflow_menu")}
                         .path=${mdiDotsVertical}
                         slot="trigger"
                       ></ha-icon-button>
@@ -1612,7 +1626,7 @@ function getDwainsHass() {
                             absolute
                           >
                             <ha-icon-button
-                              .label=${this._hass.localize("ui.common.overflow_menu")}
+                              label=${this._hass.localize("ui.common.overflow_menu")}
                               .path=${mdiDotsVertical}
                               slot="trigger"
                             ></ha-icon-button>

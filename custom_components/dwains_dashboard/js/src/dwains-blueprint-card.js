@@ -3,8 +3,7 @@ import { css, html, LitElement } from 'lit-element';
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  const cardHelpers = await window.loadCardHelpers();
+  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
 
     class DwainsBlueprintCard extends LitElement {
         static get properties() {
@@ -83,7 +82,7 @@ Promise.race(bases2).then(async () => {
         static get styles() {
           return [
             css`
-            mwc-formfield, ha-textfield,.formfield {
+            ha-formfield, ha-textfield,.formfield {
               width: 100%;
             }
             .formfield {
@@ -182,7 +181,7 @@ Promise.race(bases2).then(async () => {
           if(v["type"] && v["type"] == 'entity-picker'){
             card = html`
             <ha-entity-picker
-                .label=${v["name"]}
+                label=${v["name"]}
                 .value=${value}
                 .key=${k}
                 .hass=${this.hass}
@@ -191,7 +190,7 @@ Promise.race(bases2).then(async () => {
           } else if(v["type"] && v["type"] == 'icon-picker'){
             card = html`
             <ha-icon-picker
-              .label=${v["name"]}
+              label=${v["name"]}
               .value=${value}
               .key=${k}
               .name=${v["name"]}
@@ -207,7 +206,7 @@ Promise.race(bases2).then(async () => {
             card = html`
             <ha-formfield
                   style="display: block;"
-                  .label=${v["name"]}
+                  label=${v["name"]}
                 >
                 <ha-checkbox
                     @change=${this._checkboxChanged}
@@ -220,7 +219,7 @@ Promise.race(bases2).then(async () => {
           } else {
             card = html`
             <ha-textfield
-                .label=${v["name"]}
+                label=${v["name"]}
                 .value=${value}
                 .key=${k}
                 @input=${this._inputChanged}
