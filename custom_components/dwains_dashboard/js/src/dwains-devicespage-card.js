@@ -129,34 +129,28 @@ function getDwainsHass() {
 	        }
 
         async _reloadCard(){
-          if (this.__ddReloading) {
-            this.__ddReloadAgain = true;
-            return this.__ddReloading;
-          }
-          this.__ddReloading = (async () => {
-            do {
-              this.__ddReloadAgain = false;
-              await this._loadData();
-            } while (this.__ddReloadAgain);
-            this.requestUpdate();
-          })();
-          try {
-            await this.__ddReloading;
-          } finally {
-            this.__ddReloading = null;
-          }
+          await this._loadData();
+          this.requestUpdate();
         }
 
 	        async _loadData(){
 	          this.selectedArea = this.selectedArea || "";
 	          this.startedUp = false;
 
-          [this.areas, this.devices, this.entities, this.configuration] = await Promise.all([
-            this._hass.callWS({ type: "config/area_registry/list" }),
-            this._hass.callWS({ type: "config/device_registry/list" }),
-            this._hass.callWS({ type: "config/entity_registry/list" }),
-            this._hass.callWS({ type: 'dwains_dashboard/configuration/get' }),
-          ]);
+          this.areas = await this._hass.callWS({
+            type: "config/area_registry/list"
+          });
+          this.devices = await this._hass.callWS({
+            type: "config/device_registry/list"
+          });
+          this.entities = await this._hass.callWS({
+            type: "config/entity_registry/list"
+          });
+
+          //Load configuration
+          this.configuration = await this._hass.callWS({
+            type: 'dwains_dashboard/configuration/get'
+          });
 
           if(this.areas == null || this.areas.length === 0
           || this.devices == null || this.devices.length === 0
@@ -466,7 +460,7 @@ function getDwainsHass() {
                         friendlyName: friendlyName,
                         hideEntity: hideEntity,
                         excludeEntity: excludeEntity,
-	                        card: this._createCachedCard(`device:${domain}:${entity.entity_id}`, cardConfig),
+	                        card: this.createCardElement2(cardConfig),
                         customCard: customCard,
                         customPopup: customPopup,
                         sort_order: (this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['devices_sort_order'] ? this.configuration['entities'][entity.entity_id]['devices_sort_order']: 99),
@@ -649,22 +643,6 @@ function getDwainsHass() {
           }
 
           return createCardElementSafe(this.cardHelpers, config, this._hass);
-        }
-
-        _createCachedCard(slot, config) {
-          const signature = JSON.stringify(config);
-          const cache = this.__ddCardCache || (this.__ddCardCache = new Map());
-          const cached = cache.get(slot);
-          if (cached && cached.signature === signature && cached.card) return cached.card;
-
-          const entry = { signature, card: this.createCardElement2(config) };
-          cache.set(slot, entry);
-          Promise.resolve(entry.card).then((card) => {
-            entry.card = card;
-          }).catch(() => {
-            if (cache.get(slot) === entry) cache.delete(slot);
-          });
-          return entry.card;
         }
 
         shouldUpdate(changedProps){

@@ -101,21 +101,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 yaml.add_representer(collections.OrderedDict, Representer.represent_dict)
 
-
-def _load_yaml_mapping(path: str) -> MutableMapping[str, Any]:
-    """Load a YAML mapping without blocking Home Assistant's event loop."""
-    if not os.path.exists(path) or os.stat(path).st_size == 0:
-        return OrderedDict()
-    with open(path, "r", encoding="utf-8") as file_handle:
-        return yaml.safe_load(file_handle) or OrderedDict()
-
-
-def _save_yaml_mapping(path: str, value: Mapping[str, Any]) -> None:
-    """Write a YAML mapping in an executor thread."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as file_handle:
-        yaml.dump(value, file_handle, default_flow_style=False, sort_keys=False)
-
 @websocket_api.async_response
 @websocket_api.websocket_command({vol.Required("type"): "dwains_dashboard/configuration/get"})
 async def websocket_get_configuration(
@@ -535,8 +520,13 @@ async def ws_handle_edit_area_bool_value(
 ) -> None:
     """Handle edit area bool value command."""
 
-    areas_path = hass.config.path("dwains-dashboard/configs/areas.yaml")
-    areas = await hass.async_add_executor_job(_load_yaml_mapping, areas_path)
+    if os.path.exists(hass.config.path("dwains-dashboard/configs/areas.yaml")):
+        #with open(hass.config.path("dwains-dashboard/configs/areas.yaml")) as f:
+        data = await hass.async_add_executor_job(open, "dwains-dashboard/configs/areas.yaml", "r")
+        with data as f:
+            areas = yaml.safe_load(f)
+    else:
+        areas = OrderedDict()
 
     area = areas.get(msg["areaId"])
 
@@ -547,7 +537,13 @@ async def ws_handle_edit_area_bool_value(
             msg["key"]: msg["value"]
         })
 
-    await hass.async_add_executor_job(_save_yaml_mapping, areas_path, areas)
+    if not os.path.exists(hass.config.path("dwains-dashboard/configs")):
+        os.makedirs(hass.config.path("dwains-dashboard/configs"))
+
+    #with open(hass.config.path("dwains-dashboard/configs/areas.yaml"), 'w') as f:
+    data = await hass.async_add_executor_job(open, "dwains-dashboard/configs/areas.yaml", "w")
+    with data as f:
+        yaml.dump(areas, f, default_flow_style=False, sort_keys=False)
 
 
     hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
@@ -1146,8 +1142,13 @@ async def ws_handle_edit_entity_bool_value(
 ) -> None:
     """Handle edit entity bool value command."""
 
-    entities_path = hass.config.path("dwains-dashboard/configs/entities.yaml")
-    entities = await hass.async_add_executor_job(_load_yaml_mapping, entities_path)
+    if os.path.exists(hass.config.path("dwains-dashboard/configs/entities.yaml")) and os.stat(hass.config.path("dwains-dashboard/configs/entities.yaml")).st_size != 0:
+        #with open(hass.config.path("dwains-dashboard/configs/entities.yaml")) as f:
+        data = await hass.async_add_executor_job(open, "dwains-dashboard/configs/entities.yaml", "r")
+        with data as f:
+            entities = yaml.safe_load(f)
+    else:
+        entities = OrderedDict()
 
     entity = entities.get(msg["entityId"])
 
@@ -1158,7 +1159,13 @@ async def ws_handle_edit_entity_bool_value(
             msg["key"]: msg["value"]
         })
 
-    await hass.async_add_executor_job(_save_yaml_mapping, entities_path, entities)
+    if not os.path.exists(hass.config.path("dwains-dashboard/configs")):
+        os.makedirs(hass.config.path("dwains-dashboard/configs"))
+
+    #with open(hass.config.path("dwains-dashboard/configs/entities.yaml"), 'w') as f:
+    data = await hass.async_add_executor_job(open, "dwains-dashboard/configs/entities.yaml", "w")
+    with data as f:
+        yaml.dump(entities, f, default_flow_style=False, sort_keys=False)
 
 
     hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
@@ -1188,12 +1195,19 @@ async def ws_handle_edit_entities_bool_value(
 ) -> None:
     """Handle edit entities bool value command."""
 
-    entities_path = hass.config.path("dwains-dashboard/configs/entities.yaml")
-    entities = await hass.async_add_executor_job(_load_yaml_mapping, entities_path)
+    if os.path.exists(hass.config.path("dwains-dashboard/configs/entities.yaml")) and os.stat(hass.config.path("dwains-dashboard/configs/entities.yaml")).st_size != 0:
+        #with open(hass.config.path("dwains-dashboard/configs/entities.yaml")) as f:
+        data = await hass.async_add_executor_job(open, "dwains-dashboard/configs/entities.yaml", "r")
+        with data as f:
+            entities = yaml.safe_load(f)
+    else:
+        entities = OrderedDict()
 
     entitiesInput = json.loads(msg["entities"])
 
-    for entityId in entitiesInput:
+    _LOGGER.warning(entitiesInput)
+
+    for num, entityId in enumerate(entitiesInput, start=1):
         entity = entities.get(entityId)
 
         if not entity:
@@ -1203,7 +1217,15 @@ async def ws_handle_edit_entities_bool_value(
             msg["key"]: msg["value"]
         })
 
-    await hass.async_add_executor_job(_save_yaml_mapping, entities_path, entities)
+    _LOGGER.warning(entities)
+
+    if not os.path.exists(hass.config.path("dwains-dashboard/configs")):
+        os.makedirs(hass.config.path("dwains-dashboard/configs"))
+
+    #with open(hass.config.path("dwains-dashboard/configs/entities.yaml"), 'w') as f:
+    data = await hass.async_add_executor_job(open, "dwains-dashboard/configs/entities.yaml", "w")
+    with data as f:
+        yaml.dump(entities, f, default_flow_style=False, sort_keys=False)
 
     hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
     hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
@@ -1590,8 +1612,13 @@ async def ws_handle_edit_device_bool_value(
 ) -> None:
     """Handle edit device bool value command."""
 
-    devices_path = hass.config.path("dwains-dashboard/configs/devices.yaml")
-    devices = await hass.async_add_executor_job(_load_yaml_mapping, devices_path)
+    if os.path.exists(hass.config.path("dwains-dashboard/configs/devices.yaml")) and os.stat(hass.config.path("dwains-dashboard/configs/devices.yaml")).st_size != 0:
+        #with open(hass.config.path("dwains-dashboard/configs/devices.yaml")) as f:
+        data = await hass.async_add_executor_job(open, hass.config.path("dwains-dashboard/configs/devices.yaml"), "r")
+        with data as f:
+            devices = yaml.safe_load(f)
+    else:
+        devices = OrderedDict()
 
     entity = devices.get(msg["device"])
 
@@ -1602,7 +1629,13 @@ async def ws_handle_edit_device_bool_value(
             msg["key"]: msg["value"]
         })
 
-    await hass.async_add_executor_job(_save_yaml_mapping, devices_path, devices)
+    if not os.path.exists(hass.config.path("dwains-dashboard/configs")):
+        os.makedirs(hass.config.path("dwains-dashboard/configs"))
+
+    #with open(hass.config.path("dwains-dashboard/configs/devices.yaml"), 'w') as f:
+    data = await hass.async_add_executor_job(open, hass.config.path("dwains-dashboard/configs/devices.yaml"), "w")
+    with data as f:
+        yaml.dump(devices, f, default_flow_style=False, sort_keys=False)
 
     hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
 
