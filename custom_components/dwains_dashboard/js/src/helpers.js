@@ -2,6 +2,86 @@ import { selectTree } from "card-tools/src/helpers";
 import {
   computeDomain
 } from 'custom-card-helpers';
+
+const getUsableDwainsConstructor = (tag) => {
+  const usable = (ctor) => Boolean(
+    ctor?.prototype && typeof ctor.prototype.setConfig === 'function'
+  );
+  return (usable(window.__dd_orig?.[tag]) && window.__dd_orig[tag])
+    || (usable(window.__dd_ctors?.[tag]) && window.__dd_ctors[tag])
+    || (usable(customElements.get(tag)) && customElements.get(tag));
+};
+
+const waitForDwainsConstructor = async (tag) => {
+  let ctor = getUsableDwainsConstructor(tag);
+  // The blueprint card is registered asynchronously. Wait for its real class
+  // instead of letting HA create an un-upgraded element without setConfig().
+  for (let attempt = 0; !ctor && attempt < 100; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    ctor = getUsableDwainsConstructor(tag);
+  }
+  return ctor;
+};
+
+const createDwainsElement = async (tag, ctor, config) => {
+  const fixedTag = `${tag}-ddfix`;
+  if (!customElements.get(fixedTag)) {
+    customElements.define(fixedTag, class extends ctor {});
+  }
+  const element = document.createElement(fixedTag);
+  if (customElements.upgrade) customElements.upgrade(element);
+  if (typeof element.setConfig !== 'function') {
+    throw new TypeError(`${fixedTag}.setConfig is not a function`);
+  }
+  await element.setConfig(config);
+  return element;
+};
+
+/** Create a Lovelace card while surviving HA scoped-registry replacements. */
+export async function createCardElementSafe(cardHelpers, config, hassObj) {
+  const tag = typeof config?.type === 'string'
+    ? config.type.replace(/^custom:/, '')
+    : '';
+  const isDwainsCard = tag.startsWith('dwains-')
+    || ['homepage-card', 'devices-card', 'more-page-card', 'more-pages-card'].includes(tag);
+  let originalError;
+
+  if (isDwainsCard) {
+    const ctor = await waitForDwainsConstructor(tag);
+    if (ctor) {
+      try {
+        const element = await createDwainsElement(tag, ctor, config);
+        if (hassObj) element.hass = hassObj;
+        return element;
+      } catch (err) {
+        originalError = err;
+      }
+    }
+  }
+
+  let element;
+  try {
+    element = await cardHelpers.createCardElement(config);
+  } catch (err) {
+    originalError = originalError || err;
+  }
+
+  const invalidDwainsElement = isDwainsCard && (
+    !element
+    || typeof element.setConfig !== 'function'
+    || element.localName === 'hui-error-card'
+    || element._config?.type === 'error'
+  );
+  if (invalidDwainsElement) {
+    const ctor = getUsableDwainsConstructor(tag);
+    if (ctor) element = await createDwainsElement(tag, ctor, config);
+  }
+
+  if (!element) throw originalError || new Error(`Unable to create card: ${config?.type || 'unknown'}`);
+  if (hassObj) element.hass = hassObj;
+  return element;
+}
+
 export async function closePopup() {
     const root = document.querySelector("home-assistant") || document.querySelector("hc-root");
     //fireEvent("hass-more-info", {entityId: "."}, root);

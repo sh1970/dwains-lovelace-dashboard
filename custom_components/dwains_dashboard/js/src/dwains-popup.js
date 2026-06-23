@@ -2,6 +2,7 @@ import { provideHass } from "card-tools/src/hass";
 import { selectTree } from "card-tools/src/helpers";
 import { fireEvent } from "card-tools/src/event";
 import "card-tools/src/lovelace-element";
+import { createCardElementSafe } from './helpers';
 
 export async function closePopUp() {
   const root = document.querySelector("home-assistant") || document.querySelector("hc-root");
@@ -51,31 +52,8 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
           const helpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
           this.card = null;
           try {
-            this.card = await helpers.createCardElement(this._card);
+            this.card = await createCardElementSafe(helpers, this._card, this.hass);
           } catch (_) {}
-          if(!this.card || typeof this.card.setConfig !== "function" || this.card.localName === "hui-error-card" || this.card._config?.type === "error"){
-            try {
-              const tag = (this._card?.type || "").replace(/^custom:/, "");
-              const usable = (ctor) => Boolean(ctor?.prototype && typeof ctor.prototype.setConfig === "function");
-              const base = (usable(window.__dd_orig?.[tag]) && window.__dd_orig[tag])
-                || (usable(window.__dd_ctors?.[tag]) && window.__dd_ctors[tag])
-                || (usable(customElements.get(tag)) && customElements.get(tag));
-              let element;
-              if(base){
-                const fixedTag = `${tag}-ddfix`;
-                if(!customElements.get(fixedTag)) customElements.define(fixedTag, class extends base {});
-                element = document.createElement(fixedTag);
-              }
-              if(!element || typeof element.setConfig !== "function"){
-                element = document.createElement(tag);
-                if(customElements.upgrade) customElements.upgrade(element);
-              }
-              if(typeof element.setConfig === "function"){
-                element.setConfig(this._card);
-                this.card = element;
-              }
-            } catch (_) {}
-          }
           if(this.card){
             this.card.hass = this.hass;
             this.requestUpdate();

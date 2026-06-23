@@ -1,3 +1,5 @@
+import { createCardElementSafe } from './helpers';
+
 (function() {
   'use strict';
   // === Dwains reliability patches (v20) ===
@@ -346,7 +348,7 @@
             const helpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
             let card;
             try {
-              card = await helpers.createCardElement(cfg);
+              card = await createCardElementSafe(helpers, cfg, this._hass || (window.__dd_get_hass && window.__dd_get_hass()));
             } catch (err) {
               let fb = null;
               if (cfg) {
@@ -364,10 +366,10 @@
                     entities: cfg.card.entities ? cfg.card.entities : [cfg.card.entity]
                   };
               }
-              card = await helpers.createCardElement(fb || {
-                type: 'entities',
-                entities: []
-              });
+              card = await createCardElementSafe(helpers, fb || {
+                 type: 'entities',
+                 entities: []
+              }, this._hass || (window.__dd_get_hass && window.__dd_get_hass()));
             }
             const ha = this._hass || (window.__dd_get_hass && window.__dd_get_hass());
             if (ha) try {

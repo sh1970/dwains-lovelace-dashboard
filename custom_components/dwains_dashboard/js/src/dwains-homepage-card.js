@@ -21,6 +21,7 @@ import {
 import { computeDomain} from 'custom-card-helpers';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import translateEngine from './translate-engine';
+import { createCardElementSafe } from './helpers';
 
 function getDwainsHass() {
   return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
@@ -222,30 +223,36 @@ function getDwainsHass() {
 	    }
 
     async _reloadCard(){
-      await this._loadData();
-      this.requestUpdate();
+      if (this.__ddReloading) {
+        this.__ddReloadAgain = true;
+        return this.__ddReloading;
+      }
+      this.__ddReloading = (async () => {
+        do {
+          this.__ddReloadAgain = false;
+          await this._loadData();
+        } while (this.__ddReloadAgain);
+        this.requestUpdate();
+      })();
+      try {
+        await this.__ddReloading;
+      } finally {
+        this.__ddReloading = null;
+      }
     }
 
     async _loadData(){
       this.startedUp = false;
 
-      this.areas = await this._hass.callWS({
-        type: "config/area_registry/list"
-      });
-      this.devices = await this._hass.callWS({
-        type: "config/device_registry/list"
-      });
-      this.entities = await this._hass.callWS({
-        type: "config/entity_registry/list"
-      });
-
-      //Load configuration
-	      this.configuration = await this._hass.callWS({
-	        type: 'dwains_dashboard/configuration/get'
-	      });
-	      this.floors = await this._hass.callWS({
-	        type: "config/floor_registry/list"
-	      }).catch(() => []);
+      // These registries are independent. Loading them concurrently removes four
+      // unnecessary websocket round trips from every hide/disable/exclude reload.
+      [this.areas, this.devices, this.entities, this.configuration, this.floors] = await Promise.all([
+        this._hass.callWS({ type: "config/area_registry/list" }),
+        this._hass.callWS({ type: "config/device_registry/list" }),
+        this._hass.callWS({ type: "config/entity_registry/list" }),
+        this._hass.callWS({ type: 'dwains_dashboard/configuration/get' }),
+        this._hass.callWS({ type: "config/floor_registry/list" }).catch(() => []),
+      ]);
 
       const data = [];
       const disabledAreas = [];
@@ -277,7 +284,7 @@ function getDwainsHass() {
         //Favorites load part
         if(this.configuration['entities']){
           const favoritesEntities = [];
-          Object.entries(this.configuration['entities']).map( async([entity,v]) => {
+          await Promise.all(Object.entries(this.configuration['entities']).map(async ([entity,v]) => {
             if(v['favorite']){
               const domain = computeDomain(entity);
               const hideEntity = this.configuration['entities'][entity] ? (this.configuration['entities'][entity]['hidden'] ? true : false) : false;
@@ -454,14 +461,14 @@ function getDwainsHass() {
                 friendlyName: friendlyName,
                 hideEntity: hideEntity,
                 excludeEntity: excludeEntity,
-	                card: await this.createCardElement2(cardConfig),
+	                card: await this._createCachedCard(`favorite:${entity}`, cardConfig),
                 customCard: customCard,
                 customPopup: customPopup,
                 isFavorite: isFavorite,
                 favorite_sort_order: (this.configuration['entities'][entity] && this.configuration['entities'][entity]['favorite_sort_order'] ? this.configuration['entities'][entity]['favorite_sort_order']: 99),
               });
             }
-          });
+          }));
 
           this.favorites = favoritesEntities;
         }
@@ -692,7 +699,7 @@ function getDwainsHass() {
                       friendlyName: friendlyName,
                       hideEntity: hideEntity,
                       excludeEntity: excludeEntity,
-	                      card: this.createCardElement2(cardConfig),
+	                      card: this._createCachedCard(`area:${area.area_id}:${entity.entity_id}`, cardConfig),
                       customCard: customCard,
                       customPopup: customPopup,
                       isFavorite: isFavorite,
@@ -975,10 +982,23 @@ function getDwainsHass() {
         return;
       }
 
-      const element = await this.cardHelpers.createCardElement(config);
-      element.hass = this._hass; // Gebruik this._hass, zorg ervoor dat deze correct is ingesteld.
+      return createCardElementSafe(this.cardHelpers, config, this._hass);
+    }
 
-      return element;
+    _createCachedCard(slot, config) {
+      const signature = JSON.stringify(config);
+      const cache = this.__ddCardCache || (this.__ddCardCache = new Map());
+      const cached = cache.get(slot);
+      if (cached && cached.signature === signature && cached.card) return cached.card;
+
+      const entry = { signature, card: this.createCardElement2(config) };
+      cache.set(slot, entry);
+      Promise.resolve(entry.card).then((card) => {
+        entry.card = card;
+      }).catch(() => {
+        if (cache.get(slot) === entry) cache.delete(slot);
+      });
+      return entry.card;
     }
 
 

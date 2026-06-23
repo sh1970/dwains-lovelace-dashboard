@@ -2,6 +2,7 @@ import { popUp } from "./dwains-popup";
 import { fireEvent } from "card-tools/src/event";
 import { mdiDotsVertical } from "@mdi/js";
 import { css, html, LitElement } from 'lit-element';
+import { createCardElementSafe } from './helpers';
 //Herschreven
 class MorePageCard extends LitElement {
 
@@ -125,7 +126,7 @@ class MorePageCard extends LitElement {
     }
 
     async createCardElement2(config) {
-        const element = await this.cardHelpers.createCardElement(config);
+        const element = await createCardElementSafe(this.cardHelpers, config, this._hass);
         element.hass = this._hass; // Zorg ervoor dat `this._hass` correct is geïnitialiseerd
         return element;
     }

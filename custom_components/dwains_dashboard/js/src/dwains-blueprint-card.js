@@ -1,5 +1,6 @@
 import { hass } from "card-tools/src/hass";
 import { css, html, LitElement } from 'lit-element';
+import { createCardElementSafe } from './helpers';
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
@@ -60,9 +61,7 @@ Promise.race(bases2).then(async () => {
 
         async createCardElement2(config){
           const cardHelper = await cardHelpers;
-          const element = await cardHelper.createCardElement(config);
-          element.hass = hass();
-          return element;
+          return createCardElementSafe(cardHelper, config, hass());
         }
 
         render() {

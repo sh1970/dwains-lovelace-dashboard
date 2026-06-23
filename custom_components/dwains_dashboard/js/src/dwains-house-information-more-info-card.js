@@ -1,5 +1,5 @@
 import { css, html, LitElement } from 'lit-element';
-import { closePopup } from "./helpers";
+import { closePopup, createCardElementSafe } from "./helpers";
 import translateEngine from './translate-engine';
 import {
     STATES_OFF,
@@ -322,9 +322,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
 
         cardConfig = {entity: entityId,...cardConfig};
 
-        const element = await this.cardHelpers.createCardElement(cardConfig);
-        element.hass = this._hass;
-        return element;
+        return createCardElementSafe(this.cardHelpers, cardConfig, this._hass);
     }
 
     _navigateToDevices(ev) {

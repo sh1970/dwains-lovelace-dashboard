@@ -1,3 +1,5 @@
+import { createCardElementSafe } from './helpers';
+
 const bases = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases).then(async () => {
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -23,7 +25,7 @@ Promise.race(bases).then(async () => {
 
   const createThing = async (tag, config) => {
     if (cardHelpers) {
-      const cardElement = cardHelpers.createCardElement(config);
+      const cardElement = createCardElementSafe(cardHelpers, config);
       return cardElement;
     }
 

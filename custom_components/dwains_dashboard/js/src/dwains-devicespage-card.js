@@ -12,6 +12,7 @@ import { mdiDotsVertical, mdiCog } from "@mdi/js";
 import { css, html, LitElement } from 'lit-element';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import translateEngine from './translate-engine';
+import { createCardElementSafe } from './helpers';
 
 function getDwainsHass() {
   return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
@@ -128,28 +129,34 @@ function getDwainsHass() {
 	        }
 
         async _reloadCard(){
-          await this._loadData();
-          this.requestUpdate();
+          if (this.__ddReloading) {
+            this.__ddReloadAgain = true;
+            return this.__ddReloading;
+          }
+          this.__ddReloading = (async () => {
+            do {
+              this.__ddReloadAgain = false;
+              await this._loadData();
+            } while (this.__ddReloadAgain);
+            this.requestUpdate();
+          })();
+          try {
+            await this.__ddReloading;
+          } finally {
+            this.__ddReloading = null;
+          }
         }
 
 	        async _loadData(){
 	          this.selectedArea = this.selectedArea || "";
 	          this.startedUp = false;
 
-          this.areas = await this._hass.callWS({
-            type: "config/area_registry/list"
-          });
-          this.devices = await this._hass.callWS({
-            type: "config/device_registry/list"
-          });
-          this.entities = await this._hass.callWS({
-            type: "config/entity_registry/list"
-          });
-
-          //Load configuration
-          this.configuration = await this._hass.callWS({
-            type: 'dwains_dashboard/configuration/get'
-          });
+          [this.areas, this.devices, this.entities, this.configuration] = await Promise.all([
+            this._hass.callWS({ type: "config/area_registry/list" }),
+            this._hass.callWS({ type: "config/device_registry/list" }),
+            this._hass.callWS({ type: "config/entity_registry/list" }),
+            this._hass.callWS({ type: 'dwains_dashboard/configuration/get' }),
+          ]);
 
           if(this.areas == null || this.areas.length === 0
           || this.devices == null || this.devices.length === 0
@@ -459,7 +466,7 @@ function getDwainsHass() {
                         friendlyName: friendlyName,
                         hideEntity: hideEntity,
                         excludeEntity: excludeEntity,
-	                        card: this.createCardElement2(cardConfig),
+	                        card: this._createCachedCard(`device:${domain}:${entity.entity_id}`, cardConfig),
                         customCard: customCard,
                         customPopup: customPopup,
                         sort_order: (this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['devices_sort_order'] ? this.configuration['entities'][entity.entity_id]['devices_sort_order']: 99),
@@ -626,8 +633,7 @@ function getDwainsHass() {
               cards: inputCards,
           };
           const cardHelper = await cardHelpers;
-          const element = await cardHelper.createCardElement(cardInput2);
-          element.hass = this._hass;
+          const element = await createCardElementSafe(cardHelper, cardInput2, this._hass);
           //element.setConfig(cardInput2);
 
           //console.log(element);
@@ -642,10 +648,23 @@ function getDwainsHass() {
             return;
           }
 
-          const element = await this.cardHelpers.createCardElement(config);
-          element.hass = this._hass; // Gebruik this._hass, zorg ervoor dat deze correct is ingesteld.
+          return createCardElementSafe(this.cardHelpers, config, this._hass);
+        }
 
-          return element;
+        _createCachedCard(slot, config) {
+          const signature = JSON.stringify(config);
+          const cache = this.__ddCardCache || (this.__ddCardCache = new Map());
+          const cached = cache.get(slot);
+          if (cached && cached.signature === signature && cached.card) return cached.card;
+
+          const entry = { signature, card: this.createCardElement2(config) };
+          cache.set(slot, entry);
+          Promise.resolve(entry.card).then((card) => {
+            entry.card = card;
+          }).catch(() => {
+            if (cache.get(slot) === entry) cache.delete(slot);
+          });
+          return entry.card;
         }
 
         shouldUpdate(changedProps){
