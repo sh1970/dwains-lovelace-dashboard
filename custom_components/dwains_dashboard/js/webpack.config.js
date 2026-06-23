@@ -31,7 +31,6 @@ module.exports = {
     './src/dwains-edit-entity-card-card.js',
     './src/dwains-edit-entity-card.js',
     './src/dwains-edit-entity-popup-card.js',
-    './src/dwains-edit-homepage-header-card.js',
     './src/dwains-edit-device-card-card.js',
     './src/dwains-edit-device-popup-card.js',
     './src/dwains-edit-device-button-card.js',

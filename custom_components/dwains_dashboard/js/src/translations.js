@@ -3,7 +3,6 @@
 const translations = {
     en: {
         global: {
-            dwains_dashboard_settings: 'Dwains Dashboard Settings',
             enable_edit_mode: 'Enable edit mode',
             disable_edit_mode: 'Disable edit mode',
             version: 'Version',
@@ -79,6 +78,7 @@ const translations = {
             group_by_floor: 'Group by floor',
             ungroup_by_floor: 'Ungroup by floor',
             icon: 'Area icon',
+            hide_icon: 'Hide icon',
             floor: 'Area floor',
             no_floor: 'No floor',
             disable: 'Disable area in DD',
@@ -185,7 +185,6 @@ const translations = {
     //NL Dutch
     nl: {
         global: {
-            dwains_dashboard_settings: 'Dwains Dashboard Instellingen',
             enable_edit_mode: 'Bewerkingsmodus inschakelen',
             disable_edit_mode: 'Bewerkingsmodus uitschakelen',
             version: 'Versie',
@@ -260,6 +259,7 @@ const translations = {
             group_by_floor: 'Groeperen op verdieping',
             ungroup_by_floor: 'Groepering opheffen op verdieping',
             icon: 'Gebied icoon',
+            hide_icon: 'Pictogram verbergen',
             floor: 'Gebied verdieping',
             no_floor: 'Geen verdieping',
             disable: 'Schakel gebied uit in DD',
@@ -355,7 +355,6 @@ const translations = {
     //FR French
     fr: {
         global: {
-            dwains_dashboard_settings: 'Paramètres Dwains Dashboard',
             enable_edit_mode: 'Activer le mode d\'édition',
             disable_edit_mode: 'Désactiver le mode d\'édition',
             version: 'Version',
@@ -430,6 +429,7 @@ const translations = {
             group_by_floor: 'Regrouper par étage',
             ungroup_by_floor: 'Dégrouper par étage',
             icon: 'Icône',
+            hide_icon: 'Masquer l\'icône',
             floor: 'Étage',
             no_floor: 'Aucun n\'étage',
             disable: 'Désactiver l\'aréa dans DD',
@@ -524,7 +524,6 @@ const translations = {
      //DE German
      de: {     
         global: {      
-            dwains_dashboard_settings: 'Dwains Dashboard Einstellungen',        
             enable_edit_mode: 'Aktiviere Bearbeitungsmodus',        
             disable_edit_mode: 'Deaktiviere Bearbeitungsmodus',        
             version: 'Version',        
@@ -599,6 +598,7 @@ const translations = {
             group_by_floor: 'Gruppierung nach Etage',        
             ungroup_by_floor: 'Gruppierung nach Etage aufheben',     
             icon: 'Icon des Bereichs',        
+            hide_icon: 'Icon ausblenden',
             floor: 'Etage',      
             no_floor: 'Keine Etagen',
             disable: 'Deaktiviere Bereich in DD',
@@ -625,7 +625,7 @@ const translations = {
             open: 'offen',      
             cover: 'Beschattung',       
             light: 'Licht',       
-            climate: 'Klima',     
+            climate: 'Klimageräte',     
             sensor: 'Sensor',      
             binary_sensor: 'Binärer Sensor',   
             media_player: 'Medien',    
@@ -694,7 +694,6 @@ const translations = {
     //PT PORTUGUESE 
     pt: {
         global: {
-            dwains_dashboard_settings: 'Configurações do painel Dwains',
             enable_edit_mode: 'Ativar o modo de edição',
             disable_edit_mode: 'Desabilitar o modo de edição',
             version: 'Versão',
@@ -769,6 +768,7 @@ const translations = {
             group_by_floor: 'Agrupar por andar',
             ungroup_by_floor: 'Desagrupar por andar',
             icon: 'Ícone da divisão',
+            hide_icon: 'Ocultar ícone',
             floor: 'Piso da divisão',
             no_floor: 'Sem piso',
             disable: 'Disable area in DD',
@@ -859,7 +859,6 @@ const translations = {
     //SV Swedish
     sv: {
         global: {
-            dwains_dashboard_settings: 'Dwains Dashboardinställningar',
             enable_edit_mode: 'Aktivera redigeringsläge',
             disable_edit_mode: 'Inaktivera redigeringsläge',
             version: 'Version',
@@ -934,6 +933,7 @@ const translations = {
             group_by_floor: 'Gruppera efter våningsplan',
             ungroup_by_floor: 'Avgruppera efter våningsplan',
             icon: 'Områdesikon',
+            hide_icon: 'Dölj ikon',
             floor: 'Våningsplan',
             no_floor: 'Inget våningsplan',
             disable: 'Inaktivera område i DD',
@@ -1029,7 +1029,6 @@ const translations = {
     // It Italian
     it: {
         global: {
-            dwains_dashboard_settings: 'Dwains Dashboard Impostazioni',
             enable_edit_mode: 'Abilita la modalità di modifica',
             disable_edit_mode: 'Disabilita la modalità di modifica',
             version: 'Versione',
@@ -1104,6 +1103,7 @@ const translations = {
             group_by_floor: 'Raggruppa per piano',
             ungroup_by_floor: 'Separa per piano',
             icon: 'Icona della zona',
+            hide_icon: 'Nascondi icona',
             floor: 'Piano della zona',
             no_floor: 'Nessun pavimento',
             disable: 'Disable area in DD',
@@ -1199,7 +1199,6 @@ const translations = {
     //ES Español by Christian Villarreal
     es: {
         global: {
-            dwains_dashboard_settings: 'Opciones de Dwains Dashboard',
             enable_edit_mode: 'Habilitar modo edición',
             disable_edit_mode: 'Deshabilitar modo edición',
             version: 'Version',
@@ -1274,6 +1273,7 @@ const translations = {
             group_by_floor: 'Agrupar por piso',
             ungroup_by_floor: 'Desagrupar por piso',
             icon: 'Icono de Habitación',
+            hide_icon: 'Ocultar icono',
             floor: 'Piso de Habitación',
             no_floor: 'Sin piso',
             disable: 'Disable area in DD',
@@ -1369,7 +1369,6 @@ const translations = {
     //PL Polish
     pl: {
         global: {
-            dwains_dashboard_settings: 'Ustawenia Dwains Dashboard',
             enable_edit_mode: 'Edytuj',
             disable_edit_mode: 'Wyłącz edycję',
             version: 'Wersja',
@@ -1444,6 +1443,7 @@ const translations = {
             group_by_floor: 'Grupuj według pięter',
             ungroup_by_floor: 'Rozgrupuj według pięter',
             icon: 'Ikony obszarów',
+            hide_icon: 'Ukryj ikonę',
             floor: 'Obszar pięter',
             no_floor: 'Brak pięter',
             disable: 'Wyłącz obszar',
@@ -1539,7 +1539,6 @@ const translations = {
     //ZH Chinese
     zh: {
         global: {
-            dwains_dashboard_settings: 'Dwains 仪表板设置',
             enable_edit_mode: '启用编辑模式',
             disable_edit_mode: '禁用编辑模式',
             version: '版本',
@@ -1614,6 +1613,7 @@ const translations = {
             group_by_floor: '按楼层分组',
             ungroup_by_floor: '取消按楼层分组',
             icon: '区域图标',
+            hide_icon: '隐藏图标',
             floor: '区域楼层',
             no_floor: '没有楼层',
             disable: '在 DD 中禁用区域',

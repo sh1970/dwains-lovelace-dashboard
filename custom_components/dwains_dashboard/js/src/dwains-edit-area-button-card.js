@@ -21,7 +21,7 @@ Promise.race(bases2).then(async () => {
           margin-right: auto;
           margin-left: auto;
         }
-        .edit-element ha-icon-picker, .edit-element ha-textfield, .edit-element ha-select, .edit-element ha-entity-picker {
+        .edit-element ha-icon-picker, .edit-element ha-select, .edit-element ha-entity-picker {
           display: block;
           margin: .8rem 0;
         }
@@ -56,8 +56,8 @@ Promise.race(bases2).then(async () => {
       this.hass = hass();
       this.areaId = config.areaId;
       this.icon = config.icon ? config.icon : "";
-      this.floor = config.floor ? config.floor : "";
       this.disableArea = config.disableArea ? config.disableArea : false;
+      this.hideIcon = config.hideIcon ? config.hideIcon : false;
     }
     async connectedCallback(){
       //console.log('connectedCallBack');
@@ -85,11 +85,12 @@ Promise.race(bases2).then(async () => {
     _iconPickerChange(ev){
       this.icon = ev.detail['value'];
     }
-    _floorChanged(ev){
-      this.floor = ev.target.value;
-    }
     _disableValueChanged(ev) {
       this.disableArea = ev.target.checked;
+    }
+    _hideIconValueChanged(ev) {
+      this.hideIcon = ev.target.checked;
+      this.requestUpdate();
     }
     _saveButton(ev){
       if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
@@ -98,8 +99,8 @@ Promise.race(bases2).then(async () => {
         type: 'dwains_dashboard/edit_area_button',
         icon: this.icon,
         areaId: this.areaId,
-        floor: this.floor,
         disableArea: this.disableArea,
+        hideIcon: this.hideIcon,
       }).then(
           (resp) => {
               console.log(resp);
@@ -117,15 +118,16 @@ Promise.race(bases2).then(async () => {
             label=${translateEngine(this.hass, 'area.icon')}
             .value=${this.icon}
             .name=${translateEngine(this.hass, 'area.icon')}
+            .disabled=${this.hideIcon}
             @value-changed=${this._iconPickerChange}
           ></ha-icon-picker>
-          <ha-textfield
-            label=${translateEngine(this.hass, 'area.floor')}
-            .name=${translateEngine(this.hass, 'area.floor')}
-            .value=${this.floor}
-            .style=${"width: 100%"}
-            @input=${this._floorChanged}
-          ></ha-textfield>
+          <ha-formfield>
+            <ha-checkbox
+              @change=${this._hideIconValueChanged}
+              .checked=${this.hideIcon}
+            ></ha-checkbox>
+            <span slot="label">${translateEngine(this.hass, 'area.hide_icon')}</span>
+          </ha-formfield>
           <ha-formfield>
             <ha-checkbox
               @change=${this._disableValueChanged}

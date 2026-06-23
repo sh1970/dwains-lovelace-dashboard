@@ -1,6 +1,6 @@
 import { hass } from "card-tools/src/hass";
 import { css, html, LitElement } from 'lit-element';
-import { createCardElementSafe } from './helpers';
+import { createCardElementSafe, resolveEntityName } from './helpers';
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
@@ -33,8 +33,11 @@ Promise.race(bases2).then(async () => {
           const input_entity = config.input_entity ? config.input_entity : "Error";
           let input_name;
           if(config.input_entity){
-            input_name = config.input_name ? config.input_name :
-              (hass().states[config.input_entity].attributes && hass().states[config.input_entity].attributes.friendly_name === undefined ? (config.input_entity).replace(/_/g, " ") : hass().states[config.input_entity].attributes.friendly_name);
+            input_name = config.input_name || resolveEntityName(
+              this._hass,
+              undefined,
+              config.input_entity,
+            );
           }
 
           this.cardConfig = config.card;

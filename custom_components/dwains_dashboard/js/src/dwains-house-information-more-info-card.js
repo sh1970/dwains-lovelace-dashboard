@@ -1,5 +1,5 @@
 import { css, html, LitElement } from 'lit-element';
-import { closePopup, createCardElementSafe } from "./helpers";
+import { closePopup, createCardElementSafe, resolveEntityName } from "./helpers";
 import translateEngine from './translate-engine';
 import {
     STATES_OFF,
@@ -238,6 +238,11 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
         const stateObj = this._hass.states[entityId];
         const domain = entityId.substr(0, entityId.indexOf("."));
         if (!stateObj) return null;
+	    const displayName = friendlyName || resolveEntityName(
+	        this._hass,
+	        this.configuration,
+	        entityId,
+	    );
 
         // Configuratie op basis van stateObj of entityId
         let cardConfig = {
@@ -250,7 +255,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
                 // };
                 cardConfig = {
                 type: "tile",
-                name: friendlyName,
+                name: displayName,
                 }
                 break;
             case "camera":
@@ -272,7 +277,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
                 // };
                 cardConfig = {
                 type: "thermostat",
-                name: friendlyName,
+                name: displayName,
                 features: [
                     {
                     type: "climate-fan-modes",
@@ -292,7 +297,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
                 // };
                 cardConfig = {
                 type: "tile",
-                name: friendlyName,
+                name: displayName,
                 features: [
                     {
                     type: "cover-open-close"
@@ -310,7 +315,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
                 // };
                 cardConfig = {
                 type: "tile",
-                name: friendlyName,
+                name: displayName,
                 features: [
                     {
                     type: "light-brightness",
