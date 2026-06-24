@@ -449,6 +449,7 @@ async def ws_handle_delete_blueprint(
         vol.Optional("areaId"): str,
         vol.Optional("floor"): str,
         vol.Optional("disableArea"): bool,
+        vol.Optional("hideIcon"): bool,
     }
 )
 @websocket_api.async_response
@@ -474,11 +475,18 @@ async def ws_handle_edit_area_button(
         if not area:
             areas[msg["areaId"]] = OrderedDict()
 
-        # Only the disabled flag is managed by Dwains now; area icon/floor/name
-        # come from HA's native area & floor registries. Keep sort_order (set by
-        # the sort handler) and drop any legacy icon/floor keys.
+        # DD can override the native HA area icon or explicitly hide it. Floors
+        # continue to come from HA's native floor registry.
         areas[msg["areaId"]]["disabled"] = msg.get("disableArea", False)
-        areas[msg["areaId"]].pop("icon", None)
+        if msg.get("hideIcon", False):
+            areas[msg["areaId"]]["hide_icon"] = True
+        else:
+            areas[msg["areaId"]].pop("hide_icon", None)
+        icon = msg.get("icon", "")
+        if icon:
+            areas[msg["areaId"]]["icon"] = icon
+        else:
+            areas[msg["areaId"]].pop("icon", None)
         areas[msg["areaId"]].pop("floor", None)
 
         if not os.path.exists(hass.config.path("dwains-dashboard/configs")):

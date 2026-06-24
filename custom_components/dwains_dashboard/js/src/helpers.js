@@ -91,6 +91,37 @@ export async function closePopup() {
       el.closeDialog();
 }
 
+const normalizedName = (value) => typeof value === 'string' ? value.trim() : '';
+
+/** Resolve one consistent display name for DD cards and popups. */
+export function resolveEntityName(
+  hassObj,
+  configuration,
+  entityId,
+  entityRegistryEntry,
+  deviceRegistryEntry,
+) {
+  const configuredName = normalizedName(
+    configuration?.entities?.[entityId]?.friendly_name
+  );
+  const entityName = normalizedName(entityRegistryEntry?.name);
+  const userDeviceName = normalizedName(deviceRegistryEntry?.name_by_user);
+  const deviceName = normalizedName(deviceRegistryEntry?.name);
+  const stateName = normalizedName(
+    hassObj?.states?.[entityId]?.attributes?.friendly_name
+  );
+  const originalEntityName = normalizedName(entityRegistryEntry?.original_name);
+
+  return configuredName
+    || entityName
+    || userDeviceName
+    || deviceName
+    || stateName
+    || originalEntityName
+    || entityId?.split('.').pop()?.replace(/_/g, ' ')
+    || entityId;
+}
+
 const UNAVAILABLE = 'unavailable';
 const UNKNOWN = 'unknown';
 

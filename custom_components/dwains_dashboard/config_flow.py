@@ -14,12 +14,8 @@ _LOGGER = logging.getLogger(__name__)
 SIDEPANEL_TITLE = "sidepanel_title"
 SIDEPANEL_ICON = "sidepanel_icon"
 
-# Dashboard settings -- these are the SAME values the in-dashboard settings popup
-# (dwains-edit-homepage-header-card) edits, stored in
-# dwains-dashboard/configs/settings.yaml. We surface them here in the native HA
-# Options flow so they can be changed reliably even when the in-dashboard popup
-# can't render (HA scoped-custom-element-registry vs. the old bundle). This flow
-# is plain Python + HA's form renderer, so it never hits that problem.
+# Dashboard settings are stored in dwains-dashboard/configs/settings.yaml and
+# exposed through Home Assistant's native integration options flow.
 SETTINGS_BOOLS = (
     "disable_clock",
     "am_pm_clock",

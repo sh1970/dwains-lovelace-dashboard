@@ -8,6 +8,7 @@ import {
     applyThemesOnElement,
     computeDomain
 } from 'custom-card-helpers';
+import { resolveEntityName } from './helpers';
 //Herschreven
 function getLovelace() {
     let root = document.querySelector('home-assistant');
@@ -49,7 +50,29 @@ class DwainsDashboard {
     }
 
     async loadData() {
-        this.configuration = await getDwainsHass().callWS({ type: 'dwains_dashboard/configuration/get' });
+        const ha = getDwainsHass();
+        const [configuration, entities, devices] = await Promise.all([
+            ha.callWS({ type: 'dwains_dashboard/configuration/get' }),
+            ha.callWS({ type: 'config/entity_registry/list' }).catch(() => []),
+            ha.callWS({ type: 'config/device_registry/list' }).catch(() => []),
+        ]);
+        this.configuration = configuration;
+        this.entitiesById = new Map((entities || []).map((entity) => [entity.entity_id, entity]));
+        this.devicesById = new Map((devices || []).map((device) => [device.id, device]));
+    }
+
+    _entityDisplayName(entityId) {
+        const entityEntry = this.entitiesById?.get(entityId);
+        const deviceEntry = entityEntry?.device_id
+            ? this.devicesById?.get(entityEntry.device_id)
+            : undefined;
+        return resolveEntityName(
+            getDwainsHass(),
+            this.configuration,
+            entityId,
+            entityEntry,
+            deviceEntry,
+        );
     }
 
     locationChanged() {
@@ -73,11 +96,7 @@ class DwainsDashboard {
             if(this.configuration['entities'][ev.detail.entityId] && !this.configuration['entities'][ev.detail.entityId]['custom_popup']){
                 console.log('Please enable custom popup for this entity');
             } else {
-                const friendlyName = this.configuration['entities'][ev.detail.entityId] && this.configuration['entities'][ev.detail.entityId]['friendly_name'] ?
-                    this.configuration['entities'][ev.detail.entityId]['friendly_name']
-                    :
-                    (hass().states[ev.detail.entityId].attributes.friendly_name === undefined ? (ev.detail.entityId).replace(/_/g, " ") : hass().states[ev.detail.entityId].attributes.friendly_name);
-                    ;
+                const friendlyName = this._entityDisplayName(ev.detail.entityId);
 
 
                 window.setTimeout(() => {
@@ -87,11 +106,7 @@ class DwainsDashboard {
             }
         } else if(this.configuration["devices_popup"] && this.configuration["devices_popup"][domain]){
             //Look if the domain of this entity has a custom popup
-            const friendlyName = this.configuration['entities'][ev.detail.entityId] && this.configuration['entities'][ev.detail.entityId]['friendly_name'] ?
-                this.configuration['entities'][ev.detail.entityId]['friendly_name']
-                :
-                (hass().states[ev.detail.entityId].attributes.friendly_name === undefined ? (ev.detail.entityId).replace(/_/g, " ") : hass().states[ev.detail.entityId].attributes.friendly_name);
-                ;
+            const friendlyName = this._entityDisplayName(ev.detail.entityId);
 
 
             window.setTimeout(() => {

@@ -247,7 +247,6 @@
           console.warn("[dwains-preload] heal #" + healActions + ": real errors=", errs.length,
             "| layout=", !!customElements.get("dwains-dashboard-layout"),
             "| homepage-card=", !!customElements.get("homepage-card"),
-            "| editCard=", !!customElements.get("dwains-edit-homepage-header-card"),
             "| firstError=", (errs[0]._config && (errs[0]._config.message || errs[0]._config.error)));
           for (var i = 0; i < errs.length; i++) {
             try { errs[i].dispatchEvent(new Event("ll-rebuild", { bubbles: true, composed: true })); } catch (e) {}

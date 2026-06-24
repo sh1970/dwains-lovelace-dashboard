@@ -17,7 +17,7 @@ import {
     DOMAIN_STATE_ICONS
 } from './variables';
 import translateEngine from './translate-engine';
-import { myComputeStateDisplay } from "./helpers";
+import { myComputeStateDisplay, resolveEntityName } from "./helpers";
 //Herschreven
 class DwainsHouseInformationCard extends LitElement {
     static get styles() {
@@ -168,8 +168,22 @@ class DwainsHouseInformationCard extends LitElement {
     }
 
     set hass(hass) {
-        this._hass = hass;
-        this.requestUpdate();
+      this._hass = hass;
+      this.requestUpdate();
+    }
+
+    _entityDisplayName(entityId, entityRegistryEntry) {
+        const entityEntry = entityRegistryEntry || this.entitiesById?.get(entityId);
+        const deviceEntry = entityEntry?.device_id
+            ? this.devicesById?.get(entityEntry.device_id)
+            : undefined;
+        return resolveEntityName(
+            this._hass,
+            this.configuration,
+            entityId,
+            entityEntry,
+            deviceEntry,
+        );
     }
 
     async connectedCallback() {
@@ -192,6 +206,8 @@ class DwainsHouseInformationCard extends LitElement {
         this.entities = await this._hass.callWS({
             type: "config/entity_registry/list"
         });
+	    this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
+	    this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
 
         //Load configuration
         this.configuration = await this._hass.callWS({
@@ -211,10 +227,14 @@ class DwainsHouseInformationCard extends LitElement {
             for (const entity of this.entities) {
                 const domain = computeDomain(entity.entity_id);
                 if (domain == 'person') {
+                    const entityConfig = this.configuration['entities']
+                        ? (this.configuration['entities'][entity.entity_id] || {})
+                        : {};
                     if (
-                        !(this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['disabled'])
-                        &&
-                        !(this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['excluded'])
+                        !entity.hidden_by
+                        && !entityConfig['disabled']
+                        && !entityConfig['excluded']
+                        && !entityConfig['hidden']
                     ) {
                         persons.push(entity.entity_id);
                     }
@@ -253,7 +273,7 @@ class DwainsHouseInformationCard extends LitElement {
                             const hideEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['hidden'] ? true : false) : false;
 
                             if (!disableEntity && !excludeEntity && !hideEntity) {
-                                const friendlyName = this.configuration['entities'][entity.entity_id] ? this.configuration['entities'][entity.entity_id]['friendly_name'] : "";
+                                const friendlyName = this._entityDisplayName(entity.entity_id, entity);
                                 const domain = computeDomain(entity.entity_id);
 
                                 if (
@@ -298,7 +318,7 @@ class DwainsHouseInformationCard extends LitElement {
                     .map((entityId) => ({
                         entity_id: entityId,
                         area: {},
-                        friendlyName: this._hass.states[entityId]?.attributes?.friendly_name || entityId,
+                        friendlyName: this._entityDisplayName(entityId),
                     }))
                 : (configured || []);
             window.setTimeout(() => {
@@ -485,7 +505,7 @@ class DwainsHouseInformationCard extends LitElement {
             if (imageUrl && this._hass) {
                 imageUrl = this._hass.hassUrl(imageUrl);
             }
-            const name = (stateObj.attributes.friendly_name === undefined ? (stateObj.entity_id).replace(/_/g, " ") : stateObj.attributes.friendly_name);
+            const name = this._entityDisplayName(entity_id);
             return html`
                 <div class="dd-header-tab">
                 <div class="text-center cursor-pointer" .entity=${entity_id} @click=${this._handleMoreInfo}>

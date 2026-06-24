@@ -21,7 +21,7 @@ import {
 import { computeDomain} from 'custom-card-helpers';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import translateEngine from './translate-engine';
-import { createCardElementSafe } from './helpers';
+import { createCardElementSafe, resolveEntityName } from './helpers';
 
 function getDwainsHass() {
   return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
@@ -51,6 +51,20 @@ function getDwainsHass() {
 	      } else {
         console.warn('loadCardHelpers is not available, ensure you are running a compatible version of Home Assistant');
       }
+    }
+
+    _entityDisplayName(entityId, entityRegistryEntry) {
+      const entityEntry = entityRegistryEntry || this.entitiesById?.get(entityId);
+      const deviceEntry = entityEntry?.device_id
+        ? this.devicesById?.get(entityEntry.device_id)
+        : undefined;
+      return resolveEntityName(
+        this._hass,
+        this.configuration,
+        entityId,
+        entityEntry,
+        deviceEntry,
+      );
     }
 
     /**
@@ -136,9 +150,16 @@ function getDwainsHass() {
 	        Promise.resolve(this._unsub()).catch(() => {});
 	        this._unsub = undefined;
 	      }
+	      (this.__iconRepokeTimers || []).forEach((timer) => clearTimeout(timer));
+	      this.__iconRepokeTimers = [];
+	      this.__iconRepokeScheduled = false;
 	      if(this.__masonryRO){
 	        this.__masonryRO.disconnect();
 	        this.__masonryRO = undefined;
+	      }
+	      if(this.__masonryRaf){
+	        cancelAnimationFrame(this.__masonryRaf);
+	        this.__masonryRaf = 0;
 	      }
 	    }
 
@@ -168,8 +189,11 @@ function getDwainsHass() {
 	      if(this.__iconRepokeScheduled) return;
 	      this.__iconRepokeScheduled = true;
 	      const delays = [60, 300, 900, 2000, 4000, 8000, 12000];
-	      delays.forEach((delay, index) => setTimeout(() => {
-	        if(index === delays.length - 1) this.__iconRepokeScheduled = false;
+	      this.__iconRepokeTimers = delays.map((delay, index) => setTimeout(() => {
+	        if(index === delays.length - 1){
+	          this.__iconRepokeScheduled = false;
+	          this.__iconRepokeTimers = [];
+	        }
 	        this._repokeIcons();
 	      }, delay));
 	    }
@@ -239,6 +263,8 @@ function getDwainsHass() {
       this.entities = await this._hass.callWS({
         type: "config/entity_registry/list"
       });
+	      this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
+	      this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
 
       //Load configuration
 	      this.configuration = await this._hass.callWS({
@@ -283,7 +309,8 @@ function getDwainsHass() {
               const domain = computeDomain(entity);
               const hideEntity = this.configuration['entities'][entity] ? (this.configuration['entities'][entity]['hidden'] ? true : false) : false;
               const excludeEntity = this.configuration['entities'][entity] ? (this.configuration['entities'][entity]['excluded'] ? true : false) : false;
-              const friendlyName = this.configuration['entities'][entity] ? this.configuration['entities'][entity]['friendly_name'] : "";
+              const configuredFriendlyName = this.configuration['entities'][entity] ? this.configuration['entities'][entity]['friendly_name'] : "";
+              const friendlyName = this._entityDisplayName(entity);
               const customCard = this.configuration['entities'][entity] && this.configuration['entities'][entity]['custom_card'] ? this.configuration['entities'][entity]['custom_card'] : false;
               const customPopup = this.configuration['entities'][entity] && this.configuration['entities'][entity]['custom_popup'] ? this.configuration['entities'][entity]['custom_popup'] : false;
               const isFavorite = this.configuration['entities'][entity] && this.configuration['entities'][entity]['favorite'] ? this.configuration['entities'][entity]['favorite'] : false;
@@ -452,7 +479,7 @@ function getDwainsHass() {
                 colSpanLg: colSpanLg,
                 rowSpanXl: rowSpanXl,
                 colSpanXl: colSpanXl,
-                friendlyName: friendlyName,
+                friendlyName: configuredFriendlyName,
                 hideEntity: hideEntity,
                 excludeEntity: excludeEntity,
 	                card: await this.createCardElement2(cardConfig),
@@ -514,7 +541,8 @@ function getDwainsHass() {
                 if (stateObj) {
                   const hideEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['hidden'] ? true : false) : false;
                   const excludeEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['excluded'] ? true : false) : false;
-                  const friendlyName = this.configuration['entities'][entity.entity_id] ? this.configuration['entities'][entity.entity_id]['friendly_name'] : "";
+                  const configuredFriendlyName = this.configuration['entities'][entity.entity_id] ? this.configuration['entities'][entity.entity_id]['friendly_name'] : "";
+                  const friendlyName = this._entityDisplayName(entity.entity_id, entity);
                   const customCard = this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['custom_card'] ? this.configuration['entities'][entity.entity_id]['custom_card'] : false;
                   const customPopup = this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['custom_popup'] ? this.configuration['entities'][entity.entity_id]['custom_popup'] : false;
                   const isFavorite = this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['favorite'] ? this.configuration['entities'][entity.entity_id]['favorite'] : false;
@@ -690,7 +718,7 @@ function getDwainsHass() {
                       colSpanLg: colSpanLg,
                       rowSpanXl: rowSpanXl,
                       colSpanXl: colSpanXl,
-                      friendlyName: friendlyName,
+                      friendlyName: configuredFriendlyName,
                       hideEntity: hideEntity,
                       excludeEntity: excludeEntity,
 	                      card: this.createCardElement2(cardConfig),
@@ -1020,16 +1048,16 @@ function getDwainsHass() {
       ev.stopPropagation();
       const areaId = ev.currentTarget.area_id;
       const icon = ev.currentTarget.area_icon;
-      const floor = ev.currentTarget.floor;
       const disableArea = ev.currentTarget.disable_area;
+      const hideIcon = ev.currentTarget.hide_icon;
       window.setTimeout(() => {
 
         popUp(translateEngine(this._hass, 'area.edit_area_button'), {
           type: "custom:dwains-edit-area-button-card",
           areaId: areaId,
           icon: icon,
-          floor: floor,
           disableArea: disableArea,
+          hideIcon: hideIcon,
         }, false, '');
       }, 50);
     }
@@ -1125,7 +1153,7 @@ function getDwainsHass() {
       let cardConfig, mode;
       if(this.configuration['entity_cards'] && this.configuration['entity_cards'][entityId]){
         //cardConfig = this.configuration['entity_cards'][entityId];
-        const friendlyName = this.configuration['entities'][entityId] ? this.configuration['entities'][entityId]['friendly_name'] : "";
+        const friendlyName = this._entityDisplayName(entityId);
         cardConfig = {input_name: friendlyName,input_entity: entityId,...this.configuration['entity_cards'][entityId]};
         mode = "editor-element";
       }
@@ -1150,7 +1178,7 @@ function getDwainsHass() {
       let cardConfig, mode;
       if(this.configuration['entities_popup'] && this.configuration['entities_popup'][entityId]){
         //cardConfig = this.configuration['entities_popup'][entityId];
-        const friendlyName = this.configuration['entities'][entityId] ? this.configuration['entities'][entityId]['friendly_name'] : "";
+        const friendlyName = this._entityDisplayName(entityId);
         cardConfig = {input_name: friendlyName,input_entity: entityId,...this.configuration['entities_popup'][entityId]};
         mode = "editor-element";
       }
@@ -1206,34 +1234,6 @@ function getDwainsHass() {
 
     }
 
-
-    _handleDwainsDashboardSettingsClick(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
-      ev.stopPropagation();
-      //console.log('disableSensorGraph', this.configuration['homepage_header']['disable_sensor_graph']);
-      const disableClock = ev.currentTarget.disableClock;
-      const amPmClock = ev.currentTarget.amPmClock;
-      const disableWelcomeMessage = ev.currentTarget.disableWelcomeMessage;
-      const v2Mode = ev.currentTarget.v2Mode;
-      const disableSensorGraph = ev.currentTarget.disableSensorGraph;
-      const invertCover = ev.currentTarget.invertCover;
-      const weatherEntity = ev.currentTarget.weatherEntity;
-      const alarmEntity = ev.currentTarget.alarmEntity;
-      //console.log('disableSensorGraph2', disableSensorGraph);
-      window.setTimeout(() => {
-        popUp(translateEngine(this._hass, 'global.dwains_dashboard_settings'), {
-            type: "custom:dwains-edit-homepage-header-card",
-            disableClock: disableClock,
-            amPmClock: amPmClock,
-            disableWelcomeMessage: disableWelcomeMessage,
-            v2Mode: v2Mode,
-            disableSensorGraph: disableSensorGraph,
-            invertCover: invertCover,
-            weatherEntity: weatherEntity,
-            alarmEntity: alarmEntity,
-          }, false, '');
-      }, 50);
-    }
 
     _handleAreaViewDisplayGroupedClicked(ev){
       if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
@@ -1514,6 +1514,14 @@ function getDwainsHass() {
         });
       });
 
+      const configuredArea = this.configuration['areas']
+        ? this.configuration['areas'][data.area.area_id]
+        : undefined;
+      const hideAreaIcon = configuredArea && configuredArea['hide_icon'];
+      const areaIcon = hideAreaIcon
+        ? ""
+        : ((configuredArea && configuredArea['icon']) || data.area.icon || "mdi:texture-box");
+
       return html`
         <div class="relative" data-area-id='${data.area.area_id}'>
           <div
@@ -1524,14 +1532,16 @@ function getDwainsHass() {
             @dblclick="${this._handleAreaDoubleClick}"
           >
             <div class="h-full flex flex-wrap content-between">
-	              <div class="w-full ha-icon">
-	                <ha-icon
-	                  class="h-14 w-14"
-	                  style="color: var(--primary-color);"
-	                  .hass=${this._hass}
-	                  .icon=${data.area.icon || "mdi:texture-box"}
-	                ></ha-icon>
-	              </div>
+              <div class="w-full ha-icon">
+                ${areaIcon ? html`
+                  <ha-icon
+                    class="h-14 w-14"
+                    style="color: var(--primary-color);"
+                    .hass=${this._hass}
+                    .icon=${areaIcon}
+                  ></ha-icon>
+                ` : ""}
+              </div>
               <div class="w-full">
                 <h3 class="font-semibold text-lg">${data.area.name}</h3>
                 ${sensors.length
@@ -1645,8 +1655,8 @@ function getDwainsHass() {
                 <ha-button
                   .area_id=${data.area.area_id}
                   .area_icon=${this.configuration['areas'][data.area.area_id] && this.configuration['areas'][data.area.area_id]['icon'] ? this.configuration['areas'][data.area.area_id]['icon']: ""}
-                  .floor=${this.configuration['areas'][data.area.area_id] && this.configuration['areas'][data.area.area_id]['floor'] ? this.configuration['areas'][data.area.area_id]['floor']: ""}
-                  .disable_area=${this.configuration['areas'][data.area.area_id] && this.configuration['areas'][data.area.area_id]['disable_area'] ? this.configuration['areas'][data.area.area_id]['disable_area']: false}
+                  .disable_area=${this.configuration['areas'][data.area.area_id] && this.configuration['areas'][data.area.area_id]['disabled'] ? this.configuration['areas'][data.area.area_id]['disabled']: false}
+                  .hide_icon=${this.configuration['areas'][data.area.area_id] && this.configuration['areas'][data.area.area_id]['hide_icon'] ? this.configuration['areas'][data.area.area_id]['hide_icon']: false}
 
                   @click=${this._handleAreaEditClick}
                 >
@@ -2342,9 +2352,10 @@ function getDwainsHass() {
         }
 
         return html`
-            <div class="flex flex-wrap">
+            <div class="dd-homepage-horizontal-scroll">
+            <div class="dd-homepage-columns flex flex-wrap">
               <div class="w-full ${this.configuration['homepage_header']['v2_mode'] ? "" : "lg-w-1-2 xl-w-1-3"} ${window.location.hash ? (this.configuration['homepage_header']['v2_mode'] ? "hidden" : "hidden lg-block") : ""} p-4">
-                <div class="flex justify-between mb-2">
+                <div class="dd-homepage-status mb-2">
                   <div>
                     ${this.configuration['homepage_header']['alarm_entity'] ? html`
                       <div class="area-button py-1 px-2" .entity=${this.configuration['homepage_header']['alarm_entity']} @click=${this._handleMoreInfo}>
@@ -2361,23 +2372,6 @@ function getDwainsHass() {
                     }
                   </div>
 
-                  <div>
-                    ${this._hass.user.is_admin ? html`
-                      <div
-                        class="p-1 ha-icon cursor-pointer"
-                        .disableClock=${this.configuration['homepage_header']['disable_clock'] ? true : false}
-                        .amPmClock=${this.configuration['homepage_header']['am_pm_clock'] ? true : false}
-                        .disableWelcomeMessage=${this.configuration['homepage_header']['disable_welcome_message'] ? true : false}
-                        .v2Mode=${this.configuration['homepage_header']['v2_mode'] ? true : false}
-                        .disableSensorGraph=${this.configuration['homepage_header']['disable_sensor_graph'] ? true : false}
-                        .weatherEntity=${this.configuration['homepage_header']['weather_entity'] ? this.configuration['homepage_header']['weather_entity'] : ""}
-                        .alarmEntity=${this.configuration['homepage_header']['alarm_entity'] ? this.configuration['homepage_header']['alarm_entity']: ""}
-                        @click=${this._handleDwainsDashboardSettingsClick}
-                      >
-                        <ha-icon class="w-6 h-6" .icon=${"mdi:cog"}></ha-icon>
-                      </div>
-                    ` : ""}
-                  </div>
                 </div>
                 <div class="mb-4 grid grid-cols-1 lg-grid-cols-2">
                   <div>
@@ -2490,6 +2484,7 @@ function getDwainsHass() {
               <div class="w-full ${this.configuration['homepage_header']['v2_mode'] ? "" : "lg-w-1-2 xl-w-2-3"} ${!window.location.hash ? (this.configuration['homepage_header']['v2_mode'] ? "hidden" : "hidden lg-block") : ""} p-4">
                 ${this.data.map((i) => this._renderAreaView(i))}
               </div>
+            </div>
             </div>
             <div class="sticky z-30 bottom-0 ${!window.location.hash ? "hidden" : ""} ${this.configuration['homepage_header']['v2_mode'] ? "" : "lg-hidden"} text-right">
               <div @click=${this._backButtonClick} class="back-button">
@@ -2729,6 +2724,37 @@ function getDwainsHass() {
         }
         .justify-between {
             justify-content: space-between
+        }
+        .dd-homepage-status {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            align-items: start;
+            gap: .5rem;
+        }
+        .dd-homepage-status > :first-child {
+            justify-self: start;
+            min-width: 0;
+        }
+        .dd-homepage-status #weather {
+            justify-self: center;
+        }
+        .dd-homepage-horizontal-scroll {
+            max-width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-x: contain;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        .dd-homepage-horizontal-scroll::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+        }
+        @media (min-width: 1024px) {
+            .dd-homepage-columns {
+                min-width: 1024px;
+            }
         }
         .gap-4 {
             gap: 1rem

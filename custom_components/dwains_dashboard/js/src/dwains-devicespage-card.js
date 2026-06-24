@@ -12,7 +12,7 @@ import { mdiDotsVertical, mdiCog } from "@mdi/js";
 import { css, html, LitElement } from 'lit-element';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import translateEngine from './translate-engine';
-import { createCardElementSafe } from './helpers';
+import { createCardElementSafe, resolveEntityName } from './helpers';
 
 function getDwainsHass() {
   return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
@@ -38,6 +38,20 @@ function getDwainsHass() {
 	          } else {
 	            console.warn('loadCardHelpers is not available, ensure you are running a compatible version of Home Assistant');
           }
+        }
+
+        _entityDisplayName(entityId, entityRegistryEntry) {
+          const entityEntry = entityRegistryEntry || this.entitiesById?.get(entityId);
+          const deviceEntry = entityEntry?.device_id
+            ? this.devicesById?.get(entityEntry.device_id)
+            : undefined;
+          return resolveEntityName(
+            this._hass,
+            this.configuration,
+            entityId,
+            entityEntry,
+            deviceEntry,
+          );
         }
 
         /**
@@ -146,6 +160,8 @@ function getDwainsHass() {
           this.entities = await this._hass.callWS({
             type: "config/entity_registry/list"
           });
+	          this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
+	          this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
 
           //Load configuration
           this.configuration = await this._hass.callWS({
@@ -279,7 +295,8 @@ function getDwainsHass() {
                     } else {
                       const hideEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['hidden'] ? true : false) : false;
                       const excludeEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['excluded'] ? true : false) : false;
-                      const friendlyName = this.configuration['entities'][entity.entity_id] ? this.configuration['entities'][entity.entity_id]['friendly_name'] : "";
+                      const configuredFriendlyName = this.configuration['entities'][entity.entity_id] ? this.configuration['entities'][entity.entity_id]['friendly_name'] : "";
+                      const friendlyName = this._entityDisplayName(entity.entity_id, entity);
                       const customCard = this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['custom_card'] ? this.configuration['entities'][entity.entity_id]['custom_card'] : false;
                       const customPopup = this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['custom_popup'] ? this.configuration['entities'][entity.entity_id]['custom_popup'] : false;
 
@@ -457,7 +474,7 @@ function getDwainsHass() {
                         colSpanLg: colSpanLg,
                         rowSpanXl: rowSpanXl,
                         colSpanXl: colSpanXl,
-                        friendlyName: friendlyName,
+                        friendlyName: configuredFriendlyName,
                         hideEntity: hideEntity,
                         excludeEntity: excludeEntity,
 	                        card: this.createCardElement2(cardConfig),
@@ -747,7 +764,7 @@ function getDwainsHass() {
           let cardConfig, mode;
           if(this.configuration['entity_cards'] && this.configuration['entity_cards'][entityId]){
             //cardConfig = this.configuration['entity_cards'][entityId];
-            const friendlyName = this.configuration['entities'][entityId] ? this.configuration['entities'][entityId]['friendly_name'] : "";
+            const friendlyName = this._entityDisplayName(entityId);
             cardConfig = {input_name: friendlyName,input_entity: entityId,...this.configuration['entity_cards'][entityId]};
             mode = "editor-element";
           }
@@ -772,7 +789,7 @@ function getDwainsHass() {
           let cardConfig, mode;
           if(this.configuration['entities_popup'] && this.configuration['entities_popup'][entityId]){
             //cardConfig = this.configuration['entities_popup'][entityId];
-            const friendlyName = this.configuration['entities'][entityId] ? this.configuration['entities'][entityId]['friendly_name'] : "";
+            const friendlyName = this._entityDisplayName(entityId);
             cardConfig = {input_name: friendlyName,input_entity: entityId, ...this.configuration['entities_popup'][entityId]};
             mode = "editor-element";
           }
