@@ -44,6 +44,7 @@ class DwainsDashboard {
         const ha = getDwainsHass();
         if (ha && ha.connection) {
             ha.connection.subscribeEvents(() => this.reload(), "dwains_dashboard_reload");
+            ha.connection.subscribeEvents(() => this.loadData(), "dwains_dashboard_config_reload");
         } else if ((this.__ddSubscribeRetries = (this.__ddSubscribeRetries || 0) + 1) <= 30) {
             setTimeout(() => this._subscribeReload(), 200);
         }
@@ -174,10 +175,17 @@ class DwainsDashboard {
     reload() {
         const ll = lovelace_view();
         if (ll) fireEvent("config-refresh", {}, ll);
+        const reloadUrl = window.__ddReloadReturnUrl || window.location.href;
+        window.__ddReloadReturnUrl = undefined;
         let path = window.location.pathname;
         let navPath = path.substring(1, path.lastIndexOf('/'));
         if (navPath === "dwains-dashboard") {
-            setTimeout(() => document.location.reload(), 1000);
+            setTimeout(() => {
+                if (window.location.href !== reloadUrl) {
+                    history.replaceState(history.state || null, "", reloadUrl);
+                }
+                document.location.reload();
+            }, 1000);
         }
     }
 

@@ -75,6 +75,53 @@ Promise.race(bases2).then(async () => {
           margin-bottom: 15px;
         }
         /*Start blueprint table*/
+        /* Blueprint table responsive fix */
+        table.min-w-full {
+          width: 100%;
+          table-layout: fixed;
+        }
+        table.min-w-full th,
+        table.min-w-full td {
+          overflow-wrap: anywhere;
+          word-break: break-word;
+          vertical-align: top;
+        }
+        table.min-w-full .px-6 {
+          padding-left: 0.5rem;
+          padding-right: 0.5rem;
+        }
+        table.min-w-full .whitespace-nowrap {
+          white-space: normal;
+        }
+        table.min-w-full th:last-child,
+        table.min-w-full td:last-child {
+          width: 6.5rem;
+          min-width: 6.5rem;
+        }
+        table.min-w-full td:last-child ha-button {
+          display: block;
+          margin: 0.125rem 0;
+        }
+        @media (max-width: 640px) {
+          table.min-w-full .px-6 {
+            padding-left: 0.25rem;
+            padding-right: 0.25rem;
+          }
+          table.min-w-full .py-4 {
+            padding-top: 0.75rem;
+            padding-bottom: 0.75rem;
+          }
+          table.min-w-full th,
+          table.min-w-full td {
+            font-size: 0.75rem;
+            line-height: 1rem;
+          }
+          table.min-w-full th:last-child,
+          table.min-w-full td:last-child {
+            width: 5.75rem;
+            min-width: 5.75rem;
+          }
+        }
         .min-w-full {
           min-width: 100%;
         }

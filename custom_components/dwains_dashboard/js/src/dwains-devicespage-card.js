@@ -782,6 +782,7 @@ function getDwainsHass() {
         }
 
         _handleEntityEditPopupClick(ev) {
+          window.__ddReloadReturnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}${this.selectedDevice ? `#${this.selectedDevice}` : window.location.hash}`;
           if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const entityId = ev.currentTarget.entity;
@@ -949,6 +950,7 @@ function getDwainsHass() {
         }
 
         _handleDeviceEditPopupClick(ev) {
+          window.__ddReloadReturnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}${this.selectedDevice ? `#${this.selectedDevice}` : window.location.hash}`;
           if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;

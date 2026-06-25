@@ -19,7 +19,7 @@
     "step": {
       "init": {
         "title": "Dwains Dashboard Settings",
-        "description": "These are the same settings as the in-dashboard gear menu, edited here natively so they always work.",
+        "description": "These settings are stored in dwains-dashboard/configs/settings.yaml.",
         "data": {
           "sidepanel_title": "Side panel title",
           "sidepanel_icon": "Side panel icon",
@@ -33,7 +33,11 @@
           "alarm_entity": "Alarm entity",
           "hide_unavailable_entities": "Hide unavailable entities",
           "home_redirect_enabled": "Enable home redirect",
-          "home_redirect_target": "Home redirect target URL"
+          "home_redirect_target": "Home redirect target URL",
+          "area_sensor_device_classes": "Sensor values below area name"
+        },
+        "data_description": {
+          "area_sensor_device_classes": "Select the sensor device classes that should be shown on area tiles below the area name. Select nothing to show nothing."
         }
       }
     }
