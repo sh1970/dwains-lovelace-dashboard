@@ -6,13 +6,13 @@ Update June 2026
 
 Dwains Dashboard 3.9.0 has been released, and the DD3 source files are now available in this repository.
 
-DD3 is no longer under active feature development and will slowly be phased out. Existing older issues have been closed as part of a tracker cleanup. If you still experience a bug on DD3, please retest with version 3.9.0 first and open a new issue only when it is still reproducible.
+DD3 is no longer under active feature development and will slowly be phased out. Existing older issues have been closed as part of a tracker cleanup. If you still experience a bug on DD3, please retest with version 3.9.* first and open a new issue only when it is still reproducible.
 
 Active development continues in Dwains Dashboard Next:
 
 https://github.com/dwainscheeren/dwains-dashboard-next
 
-At the time of writing, Dwains Dashboard Next is still in alpha. Feature requests should be considered for Dwains Dashboard Next instead of DD3.
+At the time of writing, Dwains Dashboard Next is still in alpha. Feature requests should be considered for Dwains Dashboard Next instead of DD 3.*
 
 I built Dwains Dashboard as a free, open-source project in my spare time alongside my job. I remain proud of what we built together and grateful for everyone who reported bugs, requested features, and helped improve Dwains Dashboard over the years.
 
