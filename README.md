@@ -4,7 +4,7 @@
 
 Update June 2026
 
-Dwains Dashboard 3.9.0 has been released, and the DD3 source files are now available in this repository.
+Dwains Dashboard 3.9.2 has been released, and the DD3 source files are now available in this repository.
 
 DD3 is no longer under active feature development and will slowly be phased out. Existing older issues have been closed as part of a tracker cleanup. If you still experience a bug on DD3, please retest with version 3.9.* first and open a new issue only when it is still reproducible.
 
