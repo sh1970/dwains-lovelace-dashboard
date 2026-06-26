@@ -223,6 +223,21 @@ function getDwainsHass() {
 	      } catch (_) {}
 	    }
 
+	    _currentMasonryRowSpan(item){
+	      const width = window.innerWidth || 0;
+	      const classes = Array.from(item.classList || []);
+	      let rowSpanClass;
+	      if(width >= 1536){
+	        rowSpanClass = classes.find((className) => className.startsWith("xl-row-span-"));
+	      } else if(width >= 1024){
+	        rowSpanClass = classes.find((className) => className.startsWith("lg-row-span-"));
+	      } else {
+	        rowSpanClass = classes.find((className) => className.startsWith("row-span-"));
+	      }
+	      const rowSpan = rowSpanClass ? Number(rowSpanClass.split("-").pop()) : 1;
+	      return Number.isFinite(rowSpan) && rowSpan > 0 ? rowSpan : 1;
+	    }
+
 	    _applyMasonrySpans(){
 	      try {
 	        if(!this.shadowRoot) return;
@@ -238,6 +253,11 @@ function getDwainsHass() {
 	            grid.style.alignItems = "";
 	            grid.style.rowGap = "";
 	            Array.from(grid.children).forEach((item) => {
+	              const manualRowSpan = this._currentMasonryRowSpan(item);
+	              if(manualRowSpan > 1){
+	                item.style.gridRowEnd = "";
+	                return;
+	              }
 	              const height = item.getBoundingClientRect().height;
 	              if(height > 0) item.style.gridRowEnd = "span " + (Math.ceil(height) + 16);
 	            });
@@ -877,6 +897,32 @@ function getDwainsHass() {
       ).length);
     }
 
+    _coverOpenCount(data, deviceClass) {
+      const entities = data["cover"];
+      if (!entities) {
+        return undefined;
+      }
+      const invertCover = !!(
+        this.configuration &&
+        this.configuration.homepage_header &&
+        this.configuration.homepage_header.invert_cover
+      );
+      return entities
+        .filter((entity) =>
+          deviceClass ? entity.attributes.device_class === deviceClass : true
+        )
+        .filter((entity) => !UNAVAILABLE_STATES.includes(entity.state))
+        .filter((entity) => {
+          const position = Number(entity.attributes.current_position);
+          if (!Number.isNaN(position)) {
+            return invertCover ? position === 0 : position > 0;
+          }
+          return invertCover
+            ? STATES_OFF.includes(entity.state)
+            : !STATES_OFF.includes(entity.state);
+        }).length;
+    }
+
     _climateState(data, domain){
       const entities = data[domain];
       if (!entities) {
@@ -966,6 +1012,7 @@ function getDwainsHass() {
             !TOGGLE_DOMAINS.includes(domain) &&
             !SENSOR_DOMAINS.includes(domain) &&
             !ALERT_DOMAINS.includes(domain) &&
+            !COVER_DOMAINS.includes(domain) &&
             !CLIMATE_DOMAINS.includes(domain) &&
             !OTHER_DOMAINS.includes(domain)
           ) {
@@ -979,9 +1026,13 @@ function getDwainsHass() {
             continue;
           }
 
+          const allowedDeviceClasses = SENSOR_DOMAINS.includes(domain)
+            ? this._areaSensorDeviceClasses()
+            : DEVICE_CLASSES[domain];
+
           if (
-            (SENSOR_DOMAINS.includes(domain) || ALERT_DOMAINS.includes(domain)) &&
-            !DEVICE_CLASSES[domain].includes(
+            (SENSOR_DOMAINS.includes(domain) || ALERT_DOMAINS.includes(domain) || COVER_DOMAINS.includes(domain)) &&
+            !allowedDeviceClasses.includes(
               stateObj.attributes.device_class || ""
             )
           ) {
@@ -1010,7 +1061,9 @@ function getDwainsHass() {
 
     _toggle(ev) {
       if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      ev.preventDefault();
       ev.stopPropagation();
+      if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
       const domain = ev.currentTarget.domain;
       if (TOGGLE_DOMAINS.includes(domain)) {
         this._hass.callService(
@@ -1171,6 +1224,7 @@ function getDwainsHass() {
     }
 
     _handleEntityEditPopupClick(ev) {
+      window.__ddReloadReturnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}${this.selectedArea ? `#${this.selectedArea}` : window.location.hash}`;
       if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const entityId = ev.currentTarget.entity;
@@ -1489,6 +1543,20 @@ function getDwainsHass() {
         </div>
       `;
     }
+    _areaSensorDeviceClasses() {
+      const header =
+        this.configuration && this.configuration["homepage_header"]
+          ? this.configuration["homepage_header"]
+          : {};
+
+      if (Object.prototype.hasOwnProperty.call(header, "area_sensor_device_classes")) {
+        return Array.isArray(header["area_sensor_device_classes"])
+          ? header["area_sensor_device_classes"]
+          : [];
+      }
+
+      return ["temperature", "humidity"];
+    }
     _renderAreaButton(data){
       const entitiesByDomain = this._entitiesByDomain(
         data.entities
@@ -1501,7 +1569,7 @@ function getDwainsHass() {
         if (!(domain in entitiesByDomain)) {
           return;
         }
-        DEVICE_CLASSES[domain].forEach((deviceClass) => {
+        this._areaSensorDeviceClasses().forEach((deviceClass) => {
           if (
             entitiesByDomain[domain].some(
               (entity) => entity.attributes.device_class === deviceClass
@@ -1546,7 +1614,10 @@ function getDwainsHass() {
                 <h3 class="font-semibold text-lg">${data.area.name}</h3>
                 ${sensors.length
                   ? html`
-                    <div class="sensors text-gray">
+                    <div
+                      class="sensors text-gray"
+                      title="${sensors.join(" - ")}"
+                    >
                       ${sensors.join(" - ")}
                     </div>`
                   : ""
@@ -1563,14 +1634,16 @@ function getDwainsHass() {
                 if(domain == 'light' || domain != 'light' && on){
                   return TOGGLE_DOMAINS.includes(domain)
                     ? html`
-                      <span class="info-badge inline-flex items-center px-1 py-0.5 rounded text-xs font-medium">
+                      <span
+                        class="info-badge toggle-badge inline-flex items-center px-1 py-0.5 rounded text-xs font-medium"
+                        .domain=${domain}
+                        .area_id=${data.area.area_id}
+                        .state=${on}
+                        @click=${this._toggle}
+                      >
                         <ha-icon
                           class="${on ? 'on' : 'off'} w-6 h-6 mr-0.5"
                           .icon=${DOMAIN_STATE_ICONS[domain][on ? "on" : "off"]}
-                          .domain=${domain}
-                          .area_id=${data.area.area_id}
-                          .state=${on}
-                          @click=${this._toggle}
                         >
                         </ha-icon>
                         ${on}
@@ -1605,7 +1678,7 @@ function getDwainsHass() {
                   return "";
                 }
                 return DEVICE_CLASSES[domain].map((deviceClass) => {
-                  const isOn = this._isOn(entitiesByDomain, domain, deviceClass);
+                  const isOn = this._coverOpenCount(entitiesByDomain, deviceClass);
                   if(isOn){
                     return html`
                       ${DOMAIN_STATE_ICONS[domain][deviceClass]
@@ -2537,6 +2610,46 @@ function getDwainsHass() {
           --iron-icon-width: 100% !important;
           --iron-icon-height: 100% !important;
         }
+        .area-button .info {
+          position: absolute;
+          top: 0.75rem;
+          right: 0.75rem;
+          left: 0.75rem;
+          bottom: 4.25rem;
+          z-index: 3;
+          display: flex;
+          flex-direction: column;
+          flex-wrap: wrap-reverse;
+          justify-content: flex-start;
+          align-content: flex-start;
+          align-items: flex-end;
+          height: auto;
+          max-height: calc(100% - 5rem);
+          gap: 0 0.125rem;
+          overflow: hidden;
+          pointer-events: none;
+        }
+        .area-button .info br {
+          display: none;
+        }
+        .area-button .sensors {
+          display: -webkit-box;
+          box-sizing: border-box;
+          width: 100%;
+          white-space: normal;
+          overflow: hidden;
+          line-height: 1.18;
+          max-height: 2.36em;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+        @media (max-width: 640px) {
+          .area-button .sensors {
+            font-size: 1rem;
+            line-height: 1.15;
+            max-height: 2.3em;
+          }
+        }
         #badges {
           cursor: pointer;
           background: var( --ha-card-background, var(--card-background-color, white) );
@@ -2544,6 +2657,7 @@ function getDwainsHass() {
           color: var(--primary-text-color);
         }
         .area-button {
+          position: relative;
           cursor: pointer;
           background: var( --ha-card-background, var(--card-background-color, white) );
           border-radius: var(--ha-card-border-radius, 4px);
@@ -2554,6 +2668,10 @@ function getDwainsHass() {
           /*background-color: var(--sidebar-icon-color); */
           color: var( --dwains-info-badge-color, var(--primary-text-color) );
           background-color: var(--dwains-info-badge-background, var(--secondary-background-color));
+        }
+        .area-button .info .toggle-badge {
+          cursor: pointer;
+          pointer-events: auto;
         }
         @media (min-width: 1024px) {
           .area-button.current {
@@ -2706,6 +2824,12 @@ function getDwainsHass() {
         }
         .grid-flow-row-dense {
             grid-auto-flow: row dense
+        }
+        .dd-masonry > div > div,
+        .dd-masonry > div > div > dd-lazy-card {
+            display: block;
+            height: 100%;
+            min-height: 100%;
         }
         .grid-cols-1 {
             grid-template-columns: repeat(1, minmax(0, 1fr))

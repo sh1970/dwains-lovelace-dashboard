@@ -568,6 +568,16 @@ async def ws_handle_edit_area_bool_value(
 
 
 #edit_homepage_header
+def _normalize_area_sensor_device_classes(value):
+    if value is None:
+        return ["temperature", "humidity"]
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "dwains_dashboard/edit_homepage_header",
@@ -582,6 +592,7 @@ async def ws_handle_edit_area_bool_value(
         vol.Optional("hideUnavailableEntities"): bool,
         vol.Optional("homeRedirectEnabled"): bool,
         vol.Optional("homeRedirectTarget"): str,
+        vol.Optional("areaSensorDeviceClasses"): vol.Any([str], str),
 
     }
 )
@@ -604,6 +615,12 @@ async def ws_handle_edit_homepage_header(
         hide_unavailable = hide_unavailable.strip().lower() == "true"
     home_redirect_enabled = msg.get("homeRedirectEnabled", homepage_header.get("home_redirect_enabled", False))
     home_redirect_target = msg.get("homeRedirectTarget", homepage_header.get("home_redirect_target", "/dwains-dashboard/home"))
+    area_sensor_device_classes = _normalize_area_sensor_device_classes(
+        msg.get(
+            "areaSensorDeviceClasses",
+            homepage_header.get("area_sensor_device_classes", ["temperature", "humidity"]),
+        )
+    )
 
     homepage_header.update({
         "disable_clock": msg["disableClock"],
@@ -617,6 +634,7 @@ async def ws_handle_edit_homepage_header(
         "hide_unavailable_entities": hide_unavailable,
         "home_redirect_enabled": bool(home_redirect_enabled),
         "home_redirect_target": str(home_redirect_target),
+        "area_sensor_device_classes": area_sensor_device_classes,
     })
 
     if not os.path.exists(hass.config.path("dwains-dashboard/configs")):
@@ -784,7 +802,8 @@ async def ws_handle_edit_device_popup(
     with data as ff:
         yaml.dump(yaml.safe_load(json.dumps(filecontent)), ff, default_flow_style=False)
     
-    hass.bus.async_fire("dwains_dashboard_reload")
+    hass.bus.async_fire("dwains_dashboard_config_reload")
+    hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
 
     connection.send_result(
         msg["id"],
@@ -814,7 +833,8 @@ async def ws_handle_remove_device_popup(
     if os.path.exists(filename):
         os.remove(filename)
 
-    hass.bus.async_fire("dwains_dashboard_reload")
+    hass.bus.async_fire("dwains_dashboard_config_reload")
+    hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
     
     connection.send_result(
         msg["id"],
@@ -874,7 +894,9 @@ async def ws_handle_remove_entity_popup(
     if os.path.exists(filename):
         os.remove(filename)
 
-    hass.bus.async_fire("dwains_dashboard_reload")
+    hass.bus.async_fire("dwains_dashboard_config_reload")
+    hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
+    hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
 
     connection.send_result(
         msg["id"],
@@ -1074,7 +1096,9 @@ async def ws_handle_edit_entity_popup(
     with data as f:
         yaml.dump(entities, f, default_flow_style=False, sort_keys=False)
 
-    hass.bus.async_fire("dwains_dashboard_reload")
+    hass.bus.async_fire("dwains_dashboard_config_reload")
+    hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
+    hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
 
     connection.send_result(
         msg["id"],

@@ -60,6 +60,53 @@ Promise.race(bases2).then(async () => {
           margin-bottom: 15px;
         }
         /*Start blueprint table*/
+        /* Blueprint table responsive fix */
+        table.min-w-full {
+          width: 100%;
+          table-layout: fixed;
+        }
+        table.min-w-full th,
+        table.min-w-full td {
+          overflow-wrap: anywhere;
+          word-break: break-word;
+          vertical-align: top;
+        }
+        table.min-w-full .px-6 {
+          padding-left: 0.5rem;
+          padding-right: 0.5rem;
+        }
+        table.min-w-full .whitespace-nowrap {
+          white-space: normal;
+        }
+        table.min-w-full th:last-child,
+        table.min-w-full td:last-child {
+          width: 6.5rem;
+          min-width: 6.5rem;
+        }
+        table.min-w-full td:last-child ha-button {
+          display: block;
+          margin: 0.125rem 0;
+        }
+        @media (max-width: 640px) {
+          table.min-w-full .px-6 {
+            padding-left: 0.25rem;
+            padding-right: 0.25rem;
+          }
+          table.min-w-full .py-4 {
+            padding-top: 0.75rem;
+            padding-bottom: 0.75rem;
+          }
+          table.min-w-full th,
+          table.min-w-full td {
+            font-size: 0.75rem;
+            line-height: 1rem;
+          }
+          table.min-w-full th:last-child,
+          table.min-w-full td:last-child {
+            width: 5.75rem;
+            min-width: 5.75rem;
+          }
+        }
         .min-w-full {
           min-width: 100%;
         }
@@ -308,7 +355,11 @@ Promise.race(bases2).then(async () => {
     _haSelectChanged(ev) {
       ev.stopPropagation();
       const target = ev.currentTarget || ev.target;
-      const type = target?.type || target?.name || target?.dataset?.field;
+      // `ha-select` exposes its own `type` property in newer Home Assistant
+      // versions. Prefer our explicit field name, otherwise a selected value
+      // would be assigned to that internal type (for example "select-one")
+      // instead of rowSpan/colSpan.
+      const type = target?.name || target?.dataset?.field || target?.type;
       let value = ev.detail?.value;
       if(value === undefined && ev.detail?.index !== undefined){
         value = target?.children?.[ev.detail.index]?.value ?? target?.items?.[ev.detail.index]?.value;
@@ -489,8 +540,8 @@ Promise.race(bases2).then(async () => {
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.row')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${translateEngine(this.hass, 'editor.row')}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${translateEngine(this.hass, 'editor.rows')}</ha-dropdown-item>
               </ha-select>
               <ha-select
                 label=${translateEngine(this.hass, 'editor.col_span')}
@@ -500,8 +551,8 @@ Promise.race(bases2).then(async () => {
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.column')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${translateEngine(this.hass, 'editor.column')}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${translateEngine(this.hass, 'editor.columns')}</ha-dropdown-item>
               </ha-select>
             </div>
 
@@ -515,9 +566,9 @@ Promise.race(bases2).then(async () => {
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.row')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
-                <ha-list-item value="3">3 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${translateEngine(this.hass, 'editor.row')}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${translateEngine(this.hass, 'editor.rows')}</ha-dropdown-item>
+                <ha-dropdown-item value="3">3 ${translateEngine(this.hass, 'editor.rows')}</ha-dropdown-item>
               </ha-select>
               <ha-select
                 label=${translateEngine(this.hass, 'editor.col_span')}
@@ -527,9 +578,9 @@ Promise.race(bases2).then(async () => {
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.column')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
-                <ha-list-item value="3">3 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${translateEngine(this.hass, 'editor.column')}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${translateEngine(this.hass, 'editor.columns')}</ha-dropdown-item>
+                <ha-dropdown-item value="3">3 ${translateEngine(this.hass, 'editor.columns')}</ha-dropdown-item>
               </ha-select>
             </div>
 
@@ -543,10 +594,10 @@ Promise.race(bases2).then(async () => {
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.row')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
-                <ha-list-item value="4">3 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
-                <ha-list-item value="4">4 ${translateEngine(this.hass, 'editor.rows')}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${translateEngine(this.hass, 'editor.row')}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${translateEngine(this.hass, 'editor.rows')}</ha-dropdown-item>
+                <ha-dropdown-item value="3">3 ${translateEngine(this.hass, 'editor.rows')}</ha-dropdown-item>
+                <ha-dropdown-item value="4">4 ${translateEngine(this.hass, 'editor.rows')}</ha-dropdown-item>
               </ha-select>
               <ha-select
                 label=${translateEngine(this.hass, 'editor.col_span')}
@@ -556,10 +607,10 @@ Promise.race(bases2).then(async () => {
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${translateEngine(this.hass, 'editor.column')}</ha-list-item>
-                <ha-list-item value="2">2 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
-                <ha-list-item value="3">3 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
-                <ha-list-item value="4">4 ${translateEngine(this.hass, 'editor.columns')}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${translateEngine(this.hass, 'editor.column')}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${translateEngine(this.hass, 'editor.columns')}</ha-dropdown-item>
+                <ha-dropdown-item value="3">3 ${translateEngine(this.hass, 'editor.columns')}</ha-dropdown-item>
+                <ha-dropdown-item value="4">4 ${translateEngine(this.hass, 'editor.columns')}</ha-dropdown-item>
               </ha-select>
             </div>
             </div>

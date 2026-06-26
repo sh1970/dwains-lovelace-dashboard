@@ -1,0 +1,58 @@
+{
+  "title": "Dwains Dashboard",
+  "config": {
+    "step": {
+      "init": {
+        "title": "Dwains Dashboard Einstellungen",
+        "description": "",
+        "data": {
+          "sidepanel_icon": "Seitenleisten-Icon",
+          "sidepanel_title": "Seitenleisten-Titel"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Es ist nur eine Konfiguration von Dwains Dashboard erlaubt."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Dwains Dashboard Einstellungen",
+        "description": "Diese Einstellungen werden in dwains-dashboard/configs/settings.yaml gespeichert.",
+        "data": {
+          "sidepanel_title": "Seitenleisten-Titel",
+          "sidepanel_icon": "Seitenleisten-Icon",
+          "disable_clock": "Uhr ausblenden",
+          "am_pm_clock": "12-Stunden-Uhr (AM/PM)",
+          "disable_welcome_message": "Begrüßung ausblenden",
+          "v2_mode": "V2-Modus aktivieren (Layout)",
+          "disable_sensor_graph": "Sensor-Graph deaktivieren",
+          "invert_cover": "Rollladen-/Cover-Status invertieren",
+          "weather_entity": "Wetter-Entität",
+          "alarm_entity": "Alarm-Entität",
+          "hide_unavailable_entities": "Nicht verfügbare Entitäten ausblenden",
+          "home_redirect_enabled": "Home-Weiterleitung aktivieren",
+          "home_redirect_target": "Ziel-URL der Home-Weiterleitung",
+          "area_sensor_device_classes": "Sensorwerte unter dem Raumnamen"
+        },
+        "data_description": {
+          "area_sensor_device_classes": "Wähle die Sensor Device Classes aus, die auf Raumkacheln unter dem Raumnamen angezeigt werden sollen. Keine Auswahl bedeutet: nichts anzeigen."
+        }
+      }
+    }
+  },
+  "issues": {
+    "restart_required": {
+      "title": "Neustart erforderlich, um Dwains Dashboard vollständig zu deaktivieren",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Home Assistant neu starten",
+            "description": "Dwains Dashboard registriert ein Sidebar-Dashboard und Frontend-Ressourcen, die erst nach einem Neustart vollständig entfernt werden können.\n\nWähle **Absenden**, um jetzt neu zu starten."
+          }
+        }
+      }
+    }
+  }
+}
