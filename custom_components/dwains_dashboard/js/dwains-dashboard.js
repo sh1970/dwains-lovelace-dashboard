@@ -206,7 +206,7 @@
           margin: 0;
           font-size: 1rem;
         }
-        `]}static get properties(){return{mode:{},blueprints:{}}}setConfig(e){if(this.hass=(0,a.mo)(),this.mode=e.mode?e.mode:"pre-select",this.area_id=e.area?e.area:"",this.domain=e.domain?e.domain:"",this.position=e.position,this.page=e.page,e.cardConfig){const t=e.cardConfig;delete t.input_entity,delete t.input_name,this.cardConfig=t}else this.cardConfig="";this.filename=e.filename?e.filename.replace(".yaml",""):"",this.name=e.name?e.name:"Dwains Dashboard",this.rowSpan=e.rowSpan?e.rowSpan:"1",this.colSpan=e.colSpan?e.colSpan:"1",this.rowSpanLg=e.rowSpanLg?e.rowSpanLg:"1",this.colSpanLg=e.colSpanLg?e.colSpanLg:"1",this.rowSpanXl=e.rowSpanXl?e.rowSpanXl:"1",this.colSpanXl=e.colSpanXl?e.colSpanXl:"1";const t=document.createElement("hui-masonry-view");t.lovelace={editMode:!0},t.willUpdate(new Map)}async connectedCallback(){super.connectedCallback(),await this._loadBlueprints();const e=await window.loadCardHelpers(),t=await e.createCardElement({type:"button"});await t.constructor.getConfigElement()}async _loadBlueprints(){this.blueprints=await this.hass.callWS({type:"dwains_dashboard/get_blueprints"})}magicStuff(e){this.cardConfig=e.detail.config,this.mode="editor-element",this.requestUpdate()}magicStuffSecond(e){}_sendCard(){this.shadowRoot?.querySelectorAll("ha-select").forEach((e=>{const t=e.name||e.type;t&&void 0!==e.value&&(this[t]=`${e.value}`)}));const e=JSON.stringify(this.cardConfig);this.hass.connection.sendMessagePromise({type:"dwains_dashboard/add_card",card_data:e,area_id:this.area_id,domain:this.domain,position:this.position,filename:this.filename,page:this.page,rowSpan:this.rowSpan,colSpan:this.colSpan,rowSpanLg:this.rowSpanLg,colSpanLg:this.colSpanLg,rowSpanXl:this.rowSpanXl,colSpanXl:this.colSpanXl}).then((e=>{console.log(e),(0,s.fs)()}),(e=>{console.error("Message failed!",e)}))}_removeCard(){this.hass.connection.sendMessagePromise({type:"dwains_dashboard/remove_card",area_id:this.area_id,domain:this.domain,filename:this.filename,page:this.page}).then((e=>{console.log(e),(0,s.fs)()}),(e=>{console.error("Message failed!",e)}))}_switchMode(e){const t=e.currentTarget.mode;this.mode=t,this.requestUpdate()}_handleDeleteBlueprintClicked(e){const t=e.currentTarget.blueprint;this.hass.connection.sendMessagePromise({type:"dwains_dashboard/delete_blueprint",blueprint:t}).then((e=>{console.log(e),this._loadBlueprints(),this.requestUpdate()}),(e=>{console.error("Message failed!",e)}))}_handleUseBlueprintClicked(e){const t=e.currentTarget.blueprint;this.mode="editor-element",this.name=this.blueprints.blueprints[t].blueprint.name,this.cardConfig={type:"custom:dwains-blueprint-card",blueprint:t,card:this.blueprints.blueprints[t].card}}_installBlueprintYamlChanged(e){this.installBlueprintYaml=e.target.value}_handleInstallBlueprintClicked(e){this.installBlueprintYaml||alert("No YAML code entered!"),this.hass.connection.sendMessagePromise({type:"dwains_dashboard/install_blueprint",yamlCode:JSON.stringify(this.installBlueprintYaml)}).then((e=>{console.log(e),e.succesfull?(alert(this.hass.localize("ui.common.successfully_saved")),this._loadBlueprints(),this.requestUpdate()):alert(e.error)}),(e=>{console.error("Message failed!",e)}))}_haSelectChanged(e){e.stopPropagation();const t=e.currentTarget||e.target,i=t?.type||t?.name||t?.dataset?.field;let a=e.detail?.value;void 0===a&&void 0!==e.detail?.index&&(a=t?.children?.[e.detail.index]?.value??t?.items?.[e.detail.index]?.value),a??=e.target!==t?e.target?.value:void 0,a??=t?.value??t?.selectedValue??t?._value,i&&void 0!==a&&(this[i]=`${a}`,this.requestUpdate())}_stopPropagation(e){e.stopPropagation()}_checkCustomCard(e){const t=customElements.get(e);return n.qy`
+        `]}static get properties(){return{mode:{},blueprints:{}}}setConfig(e){if(this.hass=(0,a.mo)(),this.mode=e.mode?e.mode:"pre-select",this.area_id=e.area?e.area:"",this.domain=e.domain?e.domain:"",this.position=e.position,this.page=e.page,e.cardConfig){const t=e.cardConfig;delete t.input_entity,delete t.input_name,this.cardConfig=t}else this.cardConfig="";this.filename=e.filename?e.filename.replace(".yaml",""):"",this.name=e.name?e.name:"Dwains Dashboard",this.rowSpan=e.rowSpan?e.rowSpan:"1",this.colSpan=e.colSpan?e.colSpan:"1",this.rowSpanLg=e.rowSpanLg?e.rowSpanLg:"1",this.colSpanLg=e.colSpanLg?e.colSpanLg:"1",this.rowSpanXl=e.rowSpanXl?e.rowSpanXl:"1",this.colSpanXl=e.colSpanXl?e.colSpanXl:"1";const t=document.createElement("hui-masonry-view");t.lovelace={editMode:!0},t.willUpdate(new Map)}async connectedCallback(){super.connectedCallback(),await this._loadBlueprints();const e=await window.loadCardHelpers(),t=await e.createCardElement({type:"button"});await t.constructor.getConfigElement()}async _loadBlueprints(){this.blueprints=await this.hass.callWS({type:"dwains_dashboard/get_blueprints"})}magicStuff(e){this.cardConfig=e.detail.config,this.mode="editor-element",this.requestUpdate()}magicStuffSecond(e){}_sendCard(){this.shadowRoot?.querySelectorAll("ha-select").forEach((e=>{const t=e.name||e.type;t&&void 0!==e.value&&(this[t]=`${e.value}`)}));const e=JSON.stringify(this.cardConfig);this.hass.connection.sendMessagePromise({type:"dwains_dashboard/add_card",card_data:e,area_id:this.area_id,domain:this.domain,position:this.position,filename:this.filename,page:this.page,rowSpan:this.rowSpan,colSpan:this.colSpan,rowSpanLg:this.rowSpanLg,colSpanLg:this.colSpanLg,rowSpanXl:this.rowSpanXl,colSpanXl:this.colSpanXl}).then((e=>{console.log(e),(0,s.fs)()}),(e=>{console.error("Message failed!",e)}))}_removeCard(){this.hass.connection.sendMessagePromise({type:"dwains_dashboard/remove_card",area_id:this.area_id,domain:this.domain,filename:this.filename,page:this.page}).then((e=>{console.log(e),(0,s.fs)()}),(e=>{console.error("Message failed!",e)}))}_switchMode(e){const t=e.currentTarget.mode;this.mode=t,this.requestUpdate()}_handleDeleteBlueprintClicked(e){const t=e.currentTarget.blueprint;this.hass.connection.sendMessagePromise({type:"dwains_dashboard/delete_blueprint",blueprint:t}).then((e=>{console.log(e),this._loadBlueprints(),this.requestUpdate()}),(e=>{console.error("Message failed!",e)}))}_handleUseBlueprintClicked(e){const t=e.currentTarget.blueprint;this.mode="editor-element",this.name=this.blueprints.blueprints[t].blueprint.name,this.cardConfig={type:"custom:dwains-blueprint-card",blueprint:t,card:this.blueprints.blueprints[t].card}}_installBlueprintYamlChanged(e){this.installBlueprintYaml=e.target.value}_handleInstallBlueprintClicked(e){this.installBlueprintYaml||alert("No YAML code entered!"),this.hass.connection.sendMessagePromise({type:"dwains_dashboard/install_blueprint",yamlCode:JSON.stringify(this.installBlueprintYaml)}).then((e=>{console.log(e),e.succesfull?(alert(this.hass.localize("ui.common.successfully_saved")),this._loadBlueprints(),this.requestUpdate()):alert(e.error)}),(e=>{console.error("Message failed!",e)}))}_haSelectChanged(e){e.stopPropagation();const t=e.currentTarget||e.target,i=t?.name||t?.dataset?.field||t?.type;let a=e.detail?.value;void 0===a&&void 0!==e.detail?.index&&(a=t?.children?.[e.detail.index]?.value??t?.items?.[e.detail.index]?.value),a??=e.target!==t?e.target?.value:void 0,a??=t?.value??t?.selectedValue??t?._value,i&&void 0!==a&&(this[i]=`${a}`,this.requestUpdate())}_stopPropagation(e){e.stopPropagation()}_checkCustomCard(e){const t=customElements.get(e);return n.qy`
         <div>
           ${t?n.qy`
             <ha-icon
@@ -338,8 +338,8 @@
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${(0,o.A)(this.hass,"editor.row")}</ha-list-item>
-                <ha-list-item value="2">2 ${(0,o.A)(this.hass,"editor.rows")}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${(0,o.A)(this.hass,"editor.row")}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${(0,o.A)(this.hass,"editor.rows")}</ha-dropdown-item>
               </ha-select>
               <ha-select
                 label=${(0,o.A)(this.hass,"editor.col_span")}
@@ -349,8 +349,8 @@
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${(0,o.A)(this.hass,"editor.column")}</ha-list-item>
-                <ha-list-item value="2">2 ${(0,o.A)(this.hass,"editor.columns")}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${(0,o.A)(this.hass,"editor.column")}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${(0,o.A)(this.hass,"editor.columns")}</ha-dropdown-item>
               </ha-select>
             </div>
 
@@ -364,9 +364,9 @@
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${(0,o.A)(this.hass,"editor.row")}</ha-list-item>
-                <ha-list-item value="2">2 ${(0,o.A)(this.hass,"editor.rows")}</ha-list-item>
-                <ha-list-item value="3">3 ${(0,o.A)(this.hass,"editor.rows")}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${(0,o.A)(this.hass,"editor.row")}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${(0,o.A)(this.hass,"editor.rows")}</ha-dropdown-item>
+                <ha-dropdown-item value="3">3 ${(0,o.A)(this.hass,"editor.rows")}</ha-dropdown-item>
               </ha-select>
               <ha-select
                 label=${(0,o.A)(this.hass,"editor.col_span")}
@@ -376,9 +376,9 @@
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${(0,o.A)(this.hass,"editor.column")}</ha-list-item>
-                <ha-list-item value="2">2 ${(0,o.A)(this.hass,"editor.columns")}</ha-list-item>
-                <ha-list-item value="3">3 ${(0,o.A)(this.hass,"editor.columns")}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${(0,o.A)(this.hass,"editor.column")}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${(0,o.A)(this.hass,"editor.columns")}</ha-dropdown-item>
+                <ha-dropdown-item value="3">3 ${(0,o.A)(this.hass,"editor.columns")}</ha-dropdown-item>
               </ha-select>
             </div>
 
@@ -392,10 +392,10 @@
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${(0,o.A)(this.hass,"editor.row")}</ha-list-item>
-                <ha-list-item value="2">2 ${(0,o.A)(this.hass,"editor.rows")}</ha-list-item>
-                <ha-list-item value="4">3 ${(0,o.A)(this.hass,"editor.rows")}</ha-list-item>
-                <ha-list-item value="4">4 ${(0,o.A)(this.hass,"editor.rows")}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${(0,o.A)(this.hass,"editor.row")}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${(0,o.A)(this.hass,"editor.rows")}</ha-dropdown-item>
+                <ha-dropdown-item value="3">3 ${(0,o.A)(this.hass,"editor.rows")}</ha-dropdown-item>
+                <ha-dropdown-item value="4">4 ${(0,o.A)(this.hass,"editor.rows")}</ha-dropdown-item>
               </ha-select>
               <ha-select
                 label=${(0,o.A)(this.hass,"editor.col_span")}
@@ -405,10 +405,10 @@
                 @selected=${this._haSelectChanged}
                 @closed=${this._stopPropagation}
               >
-                <ha-list-item value="1">1 ${(0,o.A)(this.hass,"editor.column")}</ha-list-item>
-                <ha-list-item value="2">2 ${(0,o.A)(this.hass,"editor.columns")}</ha-list-item>
-                <ha-list-item value="3">3 ${(0,o.A)(this.hass,"editor.columns")}</ha-list-item>
-                <ha-list-item value="4">4 ${(0,o.A)(this.hass,"editor.columns")}</ha-list-item>
+                <ha-dropdown-item value="1">1 ${(0,o.A)(this.hass,"editor.column")}</ha-dropdown-item>
+                <ha-dropdown-item value="2">2 ${(0,o.A)(this.hass,"editor.columns")}</ha-dropdown-item>
+                <ha-dropdown-item value="3">3 ${(0,o.A)(this.hass,"editor.columns")}</ha-dropdown-item>
+                <ha-dropdown-item value="4">4 ${(0,o.A)(this.hass,"editor.columns")}</ha-dropdown-item>
               </ha-select>
             </div>
             </div>
