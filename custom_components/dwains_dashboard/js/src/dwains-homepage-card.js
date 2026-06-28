@@ -201,7 +201,7 @@ function getDwainsHass() {
 	    _layoutMasonry(){
 	      try {
 	        if(!this.shadowRoot) return;
-	        const grids = this.shadowRoot.querySelectorAll(".dd-masonry");
+	        const grids = this.shadowRoot.querySelectorAll(this.areaViewEditMode ? ".dd-masonry, .area-view-entity-sortable" : ".dd-masonry");
 	        if(!grids.length) return;
 	        if(!this.__masonryRO && "ResizeObserver" in window){
 	          this.__masonryRO = new ResizeObserver(() => {
@@ -242,7 +242,7 @@ function getDwainsHass() {
 	      try {
 	        if(!this.shadowRoot) return;
 	        const edit = this.areaViewEditMode || this.favoriteEditMode;
-	        this.shadowRoot.querySelectorAll(".dd-masonry").forEach((grid) => {
+	        this.shadowRoot.querySelectorAll(edit ? ".dd-masonry, .area-view-entity-sortable" : ".dd-masonry").forEach((grid) => {
 	          if(edit){
 	            grid.style.gridAutoRows = "auto";
 	            grid.style.alignItems = "stretch";
@@ -1296,6 +1296,9 @@ function getDwainsHass() {
       const value = ev.currentTarget.value;
       this.areaViewDisplayGrouped = value;
       Cookies.set('dwains_dashboard_areaViewDisplayGrouped', value, { expires: 365 });
+      if(this.areaViewEditMode){
+        this._requestAreaViewSortableRebuild();
+      }
     }
 
     _handleAreaDisplayGroupedClicked(ev){
@@ -1384,42 +1387,61 @@ function getDwainsHass() {
       this.areaEditMode = value;
     }
 
+    _destroySortables(){
+      if(this._sortable){
+        this._sortable.forEach(sortElement => sortElement.destroy());
+        this._sortable = undefined;
+      }
+    }
+
+    _initAreaViewSortables(){
+      this._sortable = [];
+      const sortableElements = this.shadowRoot.querySelectorAll('.area-view-entity-sortable');
+      for(var i=0; i<sortableElements.length; i++){
+        const sortType = (this.areaViewDisplayGrouped ? 'grouped_sort_order' : 'sort_order');
+        this._sortable[i] = new Sortable(sortableElements[i], {
+            forceFallback: true,
+            animation: 150,
+            dataIdAttr: "data-entity",
+            handle: '.sortable-move',
+            onEnd: function(event){
+              hass().connection.sendMessagePromise({
+                  type: 'dwains_dashboard/sort_entity',
+                  sortData: JSON.stringify(this.toArray()),
+                  sortType: sortType
+                }).then(
+                    (resp) => {
+                        console.log(resp);
+                    },
+                    (err) => {
+                        console.error('Message failed!', err);
+                    }
+                );
+            }
+        });
+      }
+    }
+
+    _requestAreaViewSortableRebuild(){
+      this._destroySortables();
+      this.updateComplete.then(() => {
+        if(this.areaViewEditMode){
+          this._initAreaViewSortables();
+        }
+      });
+    }
+
     _handleAreaViewEditModeClicked(ev){
       if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
       ev.stopPropagation();
       const value = ev.currentTarget.value;
+      this.areaViewEditMode = value;
 
       if(value){
-        this._sortable = [];
-        const sortableElements = this.shadowRoot.querySelectorAll('.sortable');
-        for(var i=0; i<sortableElements.length; i++){
-          const sortType = (this.areaViewDisplayGrouped ? 'grouped_sort_order' : 'sort_order');
-          this._sortable[i] = new Sortable(sortableElements[i], {
-              forceFallback: true,
-              animation: 150,
-              dataIdAttr: "data-entity",
-              handle: '.sortable-move',
-              onEnd: function(event){
-                hass().connection.sendMessagePromise({
-                    type: 'dwains_dashboard/sort_entity',
-                    sortData: JSON.stringify(this.toArray()),
-                    sortType: sortType
-                  }).then(
-                      (resp) => {
-                          console.log(resp);
-                      },
-                      (err) => {
-                          console.error('Message failed!', err);
-                      }
-                  );
-              }
-          });
-        }
+        this._requestAreaViewSortableRebuild();
       } else {
-        this._sortable.forEach(sortElement => sortElement.destroy());
-        this._sortable = undefined;
+        this._destroySortables();
       }
-      this.areaViewEditMode = value;
     }
 
     _handleCustomCardEditClick(ev){
@@ -1806,7 +1828,7 @@ function getDwainsHass() {
 	        });
 
 	        return html`
-	        <div class="grid grid-flow-row-dense grid-cols-2 lg-grid-cols-3 xl-grid-cols-4 gap-4 sortable dd-masonry">
+	        <div class="grid grid-flow-row-dense grid-cols-2 lg-grid-cols-3 xl-grid-cols-4 gap-4 sortable area-view-entity-sortable ${this.areaViewEditMode ? "" : "dd-masonry"}">
 	          ${cards.map((i) =>
 	            html`${this._renderAreaViewCard(i)}`
 	          )}
@@ -1843,7 +1865,7 @@ function getDwainsHass() {
           html`
             <div class="mb-5">
               <h3 class="font-semibold capitalize text-gray">${translateEngine(this._hass, 'device.'+key)}</h3>
-              <div class="grid grid-flow-row-dense grid-cols-2 lg-grid-cols-3 xl-grid-cols-4 gap-4 sortable">
+              <div class="grid grid-flow-row-dense grid-cols-2 lg-grid-cols-3 xl-grid-cols-4 gap-4 sortable area-view-entity-sortable">
                 ${Object.entries(group[key]).map(([k,v]) => html`${this._renderAreaViewCard(v)}`)}
               </div>
             </div>
