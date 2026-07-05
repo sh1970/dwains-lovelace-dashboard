@@ -34,10 +34,14 @@
           "hide_unavailable_entities": "Nicht verfügbare Entitäten ausblenden",
           "home_redirect_enabled": "Home-Weiterleitung aktivieren",
           "home_redirect_target": "Ziel-URL der Home-Weiterleitung",
-          "area_sensor_device_classes": "Sensorwerte unter dem Raumnamen"
+          "area_sensor_device_classes": "Sensorwerte unter dem Raumnamen",
+          "area_view_grouping_mode": "Gruppierung nach Entitäten",
+          "area_floor_grouping_mode": "Gruppierung nach Etagen"
         },
         "data_description": {
-          "area_sensor_device_classes": "Wähle die Sensor Device Classes aus, die auf Raumkacheln unter dem Raumnamen angezeigt werden sollen. Keine Auswahl bedeutet: nichts anzeigen."
+          "area_sensor_device_classes": "Wähle die Sensor Device Classes aus, die auf Raumkacheln unter dem Raumnamen angezeigt werden sollen. Keine Auswahl bedeutet: nichts anzeigen.",
+          "area_view_grouping_mode": "Per Client nutzt die bisherige Browser-/Geräte-Einstellung. Aktiv oder Inaktiv erzwingt die Gruppierung global serverseitig.",
+          "area_floor_grouping_mode": "Per Client nutzt die bisherige Browser-/Geräte-Einstellung. Aktiv oder Inaktiv erzwingt die Gruppierung nach Etagen global serverseitig."
         }
       }
     }

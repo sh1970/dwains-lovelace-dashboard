@@ -34,10 +34,14 @@
           "hide_unavailable_entities": "Hide unavailable entities",
           "home_redirect_enabled": "Enable home redirect",
           "home_redirect_target": "Home redirect target URL",
-          "area_sensor_device_classes": "Sensor values below area name"
+          "area_sensor_device_classes": "Sensor values below area name",
+          "area_view_grouping_mode": "Group entities",
+          "area_floor_grouping_mode": "Group areas by floor"
         },
         "data_description": {
-          "area_sensor_device_classes": "Select the sensor device classes that should be shown on area tiles below the area name. Select nothing to show nothing."
+          "area_sensor_device_classes": "Select the sensor device classes that should be shown on area tiles below the area name. Select nothing to show nothing.",
+          "area_view_grouping_mode": "Per client keeps the current browser/device setting. Enabled or disabled enforces the grouping globally from the server.",
+          "area_floor_grouping_mode": "Per client keeps the current browser/device setting. Enabled or disabled enforces area grouping by floor globally from the server."
         }
       }
     }

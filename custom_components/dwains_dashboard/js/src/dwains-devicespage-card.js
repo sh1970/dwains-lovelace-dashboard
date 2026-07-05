@@ -1210,6 +1210,12 @@ function getDwainsHass() {
 	            </div>
 	            `;
 	          } else {
+	            cards.sort(function (x, y) {
+              let a = x.grouped_sort_order,
+                  b = y.grouped_sort_order;
+              return a == b ? 0 : a > b ? 1 : -1;
+            });
+
 	            let group = cards.reduce((r, a) => {
               //console.log("a", a);
               //console.log('r', r);
@@ -1236,12 +1242,6 @@ function getDwainsHass() {
             //   return a == b ? 0 : a > b ? 1 : -1;
             //  });
 
-
-	            cards.sort(function (x, y) {
-              let a = x.grouped_sort_order,
-                  b = y.grouped_sort_order;
-              return a == b ? 0 : a > b ? 1 : -1;
-            });
 
             return html`
             <div>

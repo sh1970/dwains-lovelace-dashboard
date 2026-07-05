@@ -32,6 +32,14 @@ SETTINGS_BOOLS = (
 )
 SETTINGS_FILE = "dwains-dashboard/configs/settings.yaml"
 DEFAULT_AREA_SENSOR_DEVICE_CLASSES = ["temperature", "humidity"]
+AREA_VIEW_GROUPING_MODE_CLIENT = "client"
+AREA_VIEW_GROUPING_MODE_ENABLED = "enabled"
+AREA_VIEW_GROUPING_MODE_DISABLED = "disabled"
+AREA_VIEW_GROUPING_MODES = (
+    AREA_VIEW_GROUPING_MODE_CLIENT,
+    AREA_VIEW_GROUPING_MODE_ENABLED,
+    AREA_VIEW_GROUPING_MODE_DISABLED,
+)
 SENSOR_DEVICE_CLASS_LABELS = {
     "apparent_power": "Scheinleistung",
     "aqi": "Luftqualitätsindex",
@@ -189,6 +197,18 @@ def _sensor_device_class_options():
     ]
 
 
+def _area_view_grouping_mode(value):
+    return value if value in AREA_VIEW_GROUPING_MODES else AREA_VIEW_GROUPING_MODE_CLIENT
+
+
+def _area_view_grouping_mode_options():
+    return [
+        {"value": AREA_VIEW_GROUPING_MODE_CLIENT, "label": "Per Client"},
+        {"value": AREA_VIEW_GROUPING_MODE_ENABLED, "label": "Aktiv"},
+        {"value": AREA_VIEW_GROUPING_MODE_DISABLED, "label": "Inaktiv"},
+    ]
+
+
 @config_entries.HANDLERS.register("dwains_dashboard")
 class DwainsDashboardConfigFlow(config_entries.ConfigFlow):
     async def async_step_user(self, user_input=None):
@@ -217,6 +237,12 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             header["alarm_entity"] = user_input.get("alarm_entity", "") or ""
             header["area_sensor_device_classes"] = _sensor_device_classes_from_input(
                 user_input.get("area_sensor_device_classes", ", ".join(DEFAULT_AREA_SENSOR_DEVICE_CLASSES))
+            )
+            header["area_view_grouping_mode"] = _area_view_grouping_mode(
+                user_input.get("area_view_grouping_mode", AREA_VIEW_GROUPING_MODE_CLIENT)
+            )
+            header["area_floor_grouping_mode"] = _area_view_grouping_mode(
+                user_input.get("area_floor_grouping_mode", AREA_VIEW_GROUPING_MODE_CLIENT)
             )
             target = (user_input.get("home_redirect_target", "/dwains-dashboard/home") or "/dwains-dashboard/home").strip()
             if not target.startswith("/"):
@@ -257,6 +283,18 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
                 selector.SelectSelectorConfig(
                     options=_sensor_device_class_options(),
                     multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional("area_view_grouping_mode", default=_area_view_grouping_mode(cur.get("area_view_grouping_mode"))): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=_area_view_grouping_mode_options(),
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional("area_floor_grouping_mode", default=_area_view_grouping_mode(cur.get("area_floor_grouping_mode"))): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=_area_view_grouping_mode_options(),
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),

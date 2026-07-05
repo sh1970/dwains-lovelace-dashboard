@@ -127,10 +127,52 @@ function getDwainsHass() {
       this.areaEditMode = false;
       this.favoriteEditMode = false;
       this.areaViewEditMode = false;
-      this.areaViewDisplayGrouped = Cookies.get('dwains_dashboard_areaViewDisplayGrouped') ? (Cookies.get('dwains_dashboard_areaViewDisplayGrouped') == "false" ? false : true) : false;
-      this.areaDisplayGrouped = Cookies.get('dwains_dashboard_areaDisplayGrouped') ? (Cookies.get('dwains_dashboard_areaDisplayGrouped') == "false" ? false : true) : false;
+      this.areaViewDisplayGrouped = this._areaViewDisplayGroupedFromClient();
+      this.areaDisplayGrouped = this._areaDisplayGroupedFromClient();
 
       this._config = config;
+    }
+
+    _areaViewDisplayGroupedFromClient(){
+      return Cookies.get('dwains_dashboard_areaViewDisplayGrouped') ? (Cookies.get('dwains_dashboard_areaViewDisplayGrouped') == "false" ? false : true) : false;
+    }
+
+    _areaViewGroupingMode(){
+      const header = this.configuration && this.configuration['homepage_header'] ? this.configuration['homepage_header'] : {};
+      const mode = header['area_view_grouping_mode'] || 'client';
+      return ['client', 'enabled', 'disabled'].includes(mode) ? mode : 'client';
+    }
+
+    _areaViewDisplayGroupedFromPreference(){
+      const mode = this._areaViewGroupingMode();
+      if(mode == 'enabled') return true;
+      if(mode == 'disabled') return false;
+      return this._areaViewDisplayGroupedFromClient();
+    }
+
+    _applyAreaViewGroupingPreference(){
+      this.areaViewDisplayGrouped = this._areaViewDisplayGroupedFromPreference();
+    }
+
+    _areaDisplayGroupedFromClient(){
+      return Cookies.get('dwains_dashboard_areaDisplayGrouped') ? (Cookies.get('dwains_dashboard_areaDisplayGrouped') == "false" ? false : true) : false;
+    }
+
+    _areaFloorGroupingMode(){
+      const header = this.configuration && this.configuration['homepage_header'] ? this.configuration['homepage_header'] : {};
+      const mode = header['area_floor_grouping_mode'] || 'client';
+      return ['client', 'enabled', 'disabled'].includes(mode) ? mode : 'client';
+    }
+
+    _areaDisplayGroupedFromPreference(){
+      const mode = this._areaFloorGroupingMode();
+      if(mode == 'enabled') return true;
+      if(mode == 'disabled') return false;
+      return this._areaDisplayGroupedFromClient();
+    }
+
+    _applyAreaDisplayGroupingPreference(){
+      this.areaDisplayGrouped = this._areaDisplayGroupedFromPreference();
     }
 
 	    async connectedCallback(){
@@ -290,6 +332,8 @@ function getDwainsHass() {
 	      this.configuration = await this._hass.callWS({
 	        type: 'dwains_dashboard/configuration/get'
 	      });
+      this._applyAreaViewGroupingPreference();
+      this._applyAreaDisplayGroupingPreference();
 	      this.floors = await this._hass.callWS({
 	        type: "config/floor_registry/list"
 	      }).catch(() => []);
@@ -1294,6 +1338,14 @@ function getDwainsHass() {
       ev.stopPropagation();
 
       const value = ev.currentTarget.value;
+      const mode = this._areaViewGroupingMode();
+      if(mode != 'client'){
+        this.areaViewDisplayGrouped = mode == 'enabled';
+        if(this.areaViewEditMode){
+          this._requestAreaViewSortableRebuild();
+        }
+        return;
+      }
       this.areaViewDisplayGrouped = value;
       Cookies.set('dwains_dashboard_areaViewDisplayGrouped', value, { expires: 365 });
       if(this.areaViewEditMode){
@@ -1306,6 +1358,11 @@ function getDwainsHass() {
       ev.stopPropagation();
 
       const value = ev.currentTarget.value;
+      const mode = this._areaFloorGroupingMode();
+      if(mode != 'client'){
+        this.areaDisplayGrouped = mode == 'enabled';
+        return;
+      }
       this.areaDisplayGrouped = value;
       Cookies.set('dwains_dashboard_areaDisplayGrouped', value, { expires: 365 });
     }
@@ -1835,6 +1892,12 @@ function getDwainsHass() {
 	        </div>
 	        `;
 	      } else {
+	        cards.sort(function (x, y) {
+          let a = x.grouped_sort_order,
+              b = y.grouped_sort_order;
+          return a == b ? 0 : a > b ? 1 : -1;
+        });
+
 	        let group = cards.reduce((r, a) => {
           //console.log("a", a);
           //console.log('r', r);
@@ -1850,12 +1913,6 @@ function getDwainsHass() {
          });
 
         //console.log("sortedgroup", sortedGroup);
-
-	        cards.sort(function (x, y) {
-          let a = x.grouped_sort_order,
-              b = y.grouped_sort_order;
-          return a == b ? 0 : a > b ? 1 : -1;
-        });
 
         //console.log(group);
 
@@ -2095,29 +2152,31 @@ function getDwainsHass() {
                     .path=${mdiDotsVertical}
                     slot="trigger"
                   ></ha-icon-button>
-                    ${!this.areaViewDisplayGrouped ? html `
-                      <ha-list-item
-                        graphic="icon"
-                        .value=${true}
-                        @click=${this._handleAreaViewDisplayGroupedClicked}
-                      >
-                        <div slot="graphic">
-                          <ha-icon .icon=${"mdi:format-list-group"}></ha-icon>
-                        </div>
-                        ${translateEngine(this._hass, 'entity.group')}
-                      </ha-list-item>` : html `
-                      <ha-list-item
-                        graphic="icon"
-                        .value=${false}
-                        @click=${this._handleAreaViewDisplayGroupedClicked}
-                      >
-                        <div slot="graphic">
-                        <ha-icon .icon=${"mdi:grid"}></ha-icon>
-                        </div>
-                        ${translateEngine(this._hass, 'entity.ungroup')}
-                      </ha-list-item>
-                      `
-                    }
+                    ${this._areaViewGroupingMode() == 'client' ? html`
+                      ${!this.areaViewDisplayGrouped ? html `
+                        <ha-list-item
+                          graphic="icon"
+                          .value=${true}
+                          @click=${this._handleAreaViewDisplayGroupedClicked}
+                        >
+                          <div slot="graphic">
+                            <ha-icon .icon=${"mdi:format-list-group"}></ha-icon>
+                          </div>
+                          ${translateEngine(this._hass, 'entity.group')}
+                        </ha-list-item>` : html `
+                        <ha-list-item
+                          graphic="icon"
+                          .value=${false}
+                          @click=${this._handleAreaViewDisplayGroupedClicked}
+                        >
+                          <div slot="graphic">
+                          <ha-icon .icon=${"mdi:grid"}></ha-icon>
+                          </div>
+                          ${translateEngine(this._hass, 'entity.ungroup')}
+                        </ha-list-item>
+                        `
+                      }
+                    ` : ""}
                     ${this._hass.user.is_admin ? html`
                       ${this.areaViewEditMode ? html `
                         <ha-list-item
@@ -2508,29 +2567,31 @@ function getDwainsHass() {
                           .path=${mdiDotsVertical}
                           slot="trigger"
                         ></ha-icon-button>
-                          ${!this.areaDisplayGrouped ? html `
-                            <ha-list-item
-                              graphic="icon"
-                              .value=${true}
-                              @click=${this._handleAreaDisplayGroupedClicked}
-                            >
-                              <div slot="graphic">
-                                <ha-icon .icon=${"mdi:format-list-group"}></ha-icon>
-                              </div>
-                              ${translateEngine(this._hass, 'area.group_by_floor')}
-                            </ha-list-item>` : html `
-                            <ha-list-item
-                              graphic="icon"
-                              .value=${false}
-                              @click=${this._handleAreaDisplayGroupedClicked}
-                            >
-                              <div slot="graphic">
-                              <ha-icon .icon=${"mdi:grid"}></ha-icon>
-                              </div>
-                              ${translateEngine(this._hass, 'area.ungroup_by_floor')}
-                            </ha-list-item>
-                            `
-                          }
+                          ${this._areaFloorGroupingMode() == 'client' ? html`
+                            ${!this.areaDisplayGrouped ? html `
+                              <ha-list-item
+                                graphic="icon"
+                                .value=${true}
+                                @click=${this._handleAreaDisplayGroupedClicked}
+                              >
+                                <div slot="graphic">
+                                  <ha-icon .icon=${"mdi:format-list-group"}></ha-icon>
+                                </div>
+                                ${translateEngine(this._hass, 'area.group_by_floor')}
+                              </ha-list-item>` : html `
+                              <ha-list-item
+                                graphic="icon"
+                                .value=${false}
+                                @click=${this._handleAreaDisplayGroupedClicked}
+                              >
+                                <div slot="graphic">
+                                <ha-icon .icon=${"mdi:grid"}></ha-icon>
+                                </div>
+                                ${translateEngine(this._hass, 'area.ungroup_by_floor')}
+                              </ha-list-item>
+                              `
+                            }
+                          ` : ""}
                           ${this._hass.user.is_admin ? html`
                             ${!this.areaEditMode ? html `
                               <ha-list-item
