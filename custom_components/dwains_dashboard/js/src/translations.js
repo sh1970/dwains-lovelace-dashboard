@@ -85,6 +85,70 @@ const translations = {
             disabled: 'The following areas are disabled:',
             enable: 'Enable area',
         },
+        area_binary_sensor: {
+            summary: {
+                cold: {
+                    zero: 'No cold detected',
+                    one: 'Cold detected',
+                    many: 'Cold detected',
+                },
+                door: {
+                    zero: 'Doors closed',
+                    one: '1 door open',
+                    many: '{count} doors open',
+                },
+                fallback: {
+                    zero: '{label}: off',
+                    one: '{label}: active',
+                    many: '{label}: {count} active',
+                },
+                garage_door: {
+                    zero: 'Garage door closed',
+                    one: '1 garage door open',
+                    many: '{count} garage doors open',
+                },
+                lock: {
+                    zero: 'Locks secured',
+                    one: '1 lock unlocked',
+                    many: '{count} locks unlocked',
+                },
+                moisture: {
+                    zero: 'Dry',
+                    one: 'Moisture detected',
+                    many: 'Moisture detected',
+                },
+                motion: {
+                    zero: 'No motion',
+                    one: 'Motion detected',
+                    many: 'Motion detected',
+                },
+                safety: {
+                    zero: 'Safe',
+                    one: 'Unsafe',
+                    many: 'Unsafe',
+                },
+                smoke: {
+                    zero: 'No smoke',
+                    one: 'Smoke detected',
+                    many: 'Smoke detected',
+                },
+                sound: {
+                    zero: 'No sound',
+                    one: 'Sound detected',
+                    many: 'Sound detected',
+                },
+                vibration: {
+                    zero: 'No vibration',
+                    one: 'Vibration detected',
+                    many: 'Vibration detected',
+                },
+                window: {
+                    zero: 'Windows closed',
+                    one: '1 window open',
+                    many: '{count} windows open',
+                },
+            },
+        },
         device: {
             title: 'Device',
             title_plural: 'devices',
@@ -607,6 +671,70 @@ const translations = {
             disable: 'Deaktiviere Bereich in DD',
             disabled: 'Folgende Bereiche sind deaktiviert:',
             enable: 'Aktiviere Bereich',
+        },    
+        area_binary_sensor: {
+            summary: {
+                cold: {
+                    zero: 'Keine Kälte',
+                    one: 'Kälte erkannt',
+                    many: 'Kälte erkannt',
+                },
+                door: {
+                    zero: 'Türen geschlossen',
+                    one: '1 Tür offen',
+                    many: '{count} Türen offen',
+                },
+                fallback: {
+                    zero: '{label}: aus',
+                    one: '{label}: aktiv',
+                    many: '{label}: {count} aktiv',
+                },
+                garage_door: {
+                    zero: 'Garagentor geschlossen',
+                    one: '1 Garagentor offen',
+                    many: '{count} Garagentore offen',
+                },
+                lock: {
+                    zero: 'Schlösser verriegelt',
+                    one: '1 Schloss entriegelt',
+                    many: '{count} Schlösser entriegelt',
+                },
+                moisture: {
+                    zero: 'Trocken',
+                    one: 'Feuchtigkeit erkannt',
+                    many: 'Feuchtigkeit erkannt',
+                },
+                motion: {
+                    zero: 'Keine Bewegung',
+                    one: 'Bewegung erkannt',
+                    many: 'Bewegung erkannt',
+                },
+                safety: {
+                    zero: 'Sicher',
+                    one: 'Unsicher',
+                    many: 'Unsicher',
+                },
+                smoke: {
+                    zero: 'Kein Rauch',
+                    one: 'Rauch erkannt',
+                    many: 'Rauch erkannt',
+                },
+                sound: {
+                    zero: 'Kein Geräusch',
+                    one: 'Geräusch erkannt',
+                    many: 'Geräusch erkannt',
+                },
+                vibration: {
+                    zero: 'Keine Vibration',
+                    one: 'Vibration erkannt',
+                    many: 'Vibration erkannt',
+                },
+                window: {
+                    zero: 'Fenster geschlossen',
+                    one: '1 Fenster offen',
+                    many: '{count} Fenster offen',
+                },
+            },
         },    
         device: {         
             title: 'Gerät',       

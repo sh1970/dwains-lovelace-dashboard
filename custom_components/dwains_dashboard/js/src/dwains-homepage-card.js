@@ -27,6 +27,64 @@ function getDwainsHass() {
   return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
 }
 
+const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
+  cold: {
+    zero: "area_binary_sensor.summary.cold.zero",
+    one: "area_binary_sensor.summary.cold.one",
+    many: "area_binary_sensor.summary.cold.many",
+  },
+  door: {
+    zero: "area_binary_sensor.summary.door.zero",
+    one: "area_binary_sensor.summary.door.one",
+    many: "area_binary_sensor.summary.door.many",
+  },
+  garage_door: {
+    zero: "area_binary_sensor.summary.garage_door.zero",
+    one: "area_binary_sensor.summary.garage_door.one",
+    many: "area_binary_sensor.summary.garage_door.many",
+  },
+  lock: {
+    zero: "area_binary_sensor.summary.lock.zero",
+    one: "area_binary_sensor.summary.lock.one",
+    many: "area_binary_sensor.summary.lock.many",
+  },
+  moisture: {
+    zero: "area_binary_sensor.summary.moisture.zero",
+    one: "area_binary_sensor.summary.moisture.one",
+    many: "area_binary_sensor.summary.moisture.many",
+  },
+  motion: {
+    zero: "area_binary_sensor.summary.motion.zero",
+    one: "area_binary_sensor.summary.motion.one",
+    many: "area_binary_sensor.summary.motion.many",
+  },
+  safety: {
+    zero: "area_binary_sensor.summary.safety.zero",
+    one: "area_binary_sensor.summary.safety.one",
+    many: "area_binary_sensor.summary.safety.many",
+  },
+  smoke: {
+    zero: "area_binary_sensor.summary.smoke.zero",
+    one: "area_binary_sensor.summary.smoke.one",
+    many: "area_binary_sensor.summary.smoke.many",
+  },
+  sound: {
+    zero: "area_binary_sensor.summary.sound.zero",
+    one: "area_binary_sensor.summary.sound.one",
+    many: "area_binary_sensor.summary.sound.many",
+  },
+  vibration: {
+    zero: "area_binary_sensor.summary.vibration.zero",
+    one: "area_binary_sensor.summary.vibration.one",
+    many: "area_binary_sensor.summary.vibration.many",
+  },
+  window: {
+    zero: "area_binary_sensor.summary.window.zero",
+    one: "area_binary_sensor.summary.window.one",
+    many: "area_binary_sensor.summary.window.many",
+  },
+};
+
 
 	  class HomepageCard extends LitElement {
     static get properties() {
@@ -898,6 +956,7 @@ function getDwainsHass() {
       let uom;
       const values = entities.filter((entity) => {
         if (
+          !this._isAvailableEntity(entity) ||
           !entity.attributes.unit_of_measurement ||
           isNaN(Number(entity.state))
         ) {
@@ -1636,6 +1695,157 @@ function getDwainsHass() {
 
       return ["temperature", "humidity"];
     }
+
+    _areaBinarySensorDeviceClasses() {
+      const header =
+        this.configuration && this.configuration["homepage_header"]
+          ? this.configuration["homepage_header"]
+          : {};
+      const value = header["area_binary_sensor_device_classes"];
+
+      if(Array.isArray(value)){
+        return value;
+      }
+      return value ? [value] : [];
+    }
+
+    _areaBinarySensorEntities() {
+      const header =
+        this.configuration && this.configuration["homepage_header"]
+          ? this.configuration["homepage_header"]
+          : {};
+      const value = header["area_binary_sensor_entities"];
+
+      if(Array.isArray(value)){
+        return value;
+      }
+      return value ? [value] : [];
+    }
+
+    _areaBinarySensorLabel(deviceClass) {
+      return translateEngine(this._hass, `device.${deviceClass}`, undefined, deviceClass.replace(/_/g, " "));
+    }
+
+    _translateAreaBinarySensorText(key, replacements = {}) {
+      let text = translateEngine(this._hass, key, undefined, key);
+      Object.entries(replacements).forEach(([replacementKey, replacementValue]) => {
+        text = text.replace(new RegExp(`\\{${replacementKey}\\}`, "g"), replacementValue);
+      });
+      return text;
+    }
+
+    _isAvailableEntity(entity) {
+      return entity && !UNAVAILABLE_STATES.includes(entity.state);
+    }
+
+    _isAvailableBinarySensor(entity) {
+      return this._isAvailableEntity(entity);
+    }
+
+    _areaBinarySensorSummary(deviceClass, activeCount) {
+      const summary = AREA_BINARY_SENSOR_SUMMARY_KEYS[deviceClass];
+      if(summary){
+        const key = activeCount === 0
+          ? summary.zero
+          : activeCount === 1
+            ? summary.one
+            : summary.many;
+        return this._translateAreaBinarySensorText(key, { count: activeCount });
+      }
+
+      const label = this._areaBinarySensorLabel(deviceClass);
+      if(activeCount === 0){
+        return this._translateAreaBinarySensorText("area_binary_sensor.summary.fallback.zero", { label });
+      }
+      if(activeCount === 1){
+        return this._translateAreaBinarySensorText("area_binary_sensor.summary.fallback.one", { label });
+      }
+      return this._translateAreaBinarySensorText("area_binary_sensor.summary.fallback.many", {
+        count: activeCount,
+        label,
+      });
+    }
+
+    _isActiveBinarySensor(entity) {
+      return (
+        this._isAvailableBinarySensor(entity) &&
+        !STATES_OFF.includes(entity.state)
+      );
+    }
+
+    _entityBelongsToArea(entityId, areaId) {
+      const entity = this.entitiesById && this.entitiesById.get(entityId)
+        ? this.entitiesById.get(entityId)
+        : (this.entities || []).find((entry) => entry.entity_id === entityId);
+      if(!entity){
+        return false;
+      }
+      if(entity.area_id){
+        return entity.area_id === areaId;
+      }
+      if(entity.device_id && this.devicesById){
+        const device = this.devicesById.get(entity.device_id);
+        return !!device && device.area_id === areaId;
+      }
+      return false;
+    }
+
+    _areaEntityIdsForArea(areaId) {
+      return (this.entities || [])
+        .filter((entity) => !entity.hidden_by)
+        .filter((entity) => this._entityBelongsToArea(entity.entity_id, areaId))
+        .filter((entity) => !(this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['disabled']))
+        .filter((entity) => this._hass.states[entity.entity_id])
+        .map((entity) => entity.entity_id);
+    }
+
+    _binarySensorStateLabel(entity) {
+      if(!entity){
+        return "";
+      }
+      const deviceClass = entity.attributes.device_class || "_";
+      return (
+        this._hass.localize(`component.binary_sensor.entity_component.${deviceClass}.state.${entity.state}`) ||
+        this._hass.localize(`component.binary_sensor.entity_component._.state.${entity.state}`) ||
+        entity.state
+      );
+    }
+
+    _areaBinarySensorValues(area) {
+      const areaId = area.area_id;
+      const entityIds = this._areaEntityIdsForArea(areaId);
+      const binarySensors = entityIds
+        .map((entityId) => this._hass.states[entityId])
+        .filter((entity) => entity && computeDomain(entity.entity_id) == "binary_sensor");
+      const values = [];
+
+      this._areaBinarySensorDeviceClasses().forEach((deviceClass) => {
+        const matchingSensors = binarySensors
+          .filter((entity) => entity.attributes.device_class === deviceClass)
+          .filter((entity) => this._isAvailableBinarySensor(entity));
+
+        if(matchingSensors.length > 0){
+          const count = matchingSensors
+            .filter((entity) => this._isActiveBinarySensor(entity))
+            .length;
+          values.push(this._areaBinarySensorSummary(deviceClass, count));
+        }
+      });
+
+      this._areaBinarySensorEntities().forEach((entityId) => {
+        if(!this._entityBelongsToArea(entityId, areaId)){
+          return;
+        }
+        const entity = this._hass.states[entityId];
+        if(!entity || UNAVAILABLE_STATES.includes(entity.state)){
+          return;
+        }
+        values.push(`${this._entityDisplayName(entityId)}: ${this._binarySensorStateLabel(entity)}`);
+      });
+
+      return values;
+    }
+
     _renderAreaButton(data){
       const entitiesByDomain = this._entitiesByDomain(
         data.entities
@@ -1654,12 +1864,14 @@ function getDwainsHass() {
               (entity) => entity.attributes.device_class === deviceClass
             )
           ) {
-            sensors.push(
-              this._average(entitiesByDomain, domain, deviceClass)
-            );
+            const average = this._average(entitiesByDomain, domain, deviceClass);
+            if(average){
+              sensors.push(average);
+            }
           }
         });
       });
+      sensors.push(...this._areaBinarySensorValues(data.area));
 
       const configuredArea = this.configuration['areas']
         ? this.configuration['areas'][data.area.area_id]
