@@ -137,7 +137,6 @@ import { createCardElementSafe } from './helpers';
     if (window.__dd_home_redirect_installed) return;
     window.__dd_home_redirect_installed = true;
 
-    const KEY_ENABLED = "dwains_dashboard_home_redirect_enabled";
     const KEY_TARGET = "dwains_dashboard_home_redirect_target";
     const DEFAULT_TARGET = "/dwains-dashboard/home";
 
@@ -152,7 +151,7 @@ import { createCardElementSafe } from './helpers';
       const cfg = window.__dd_home_redirect_cfg || {};
       let enabled = cfg.enabled;
       if (typeof enabled !== "boolean") {
-        try { enabled = localStorage.getItem(KEY_ENABLED) === "true"; } catch (_) { enabled = false; }
+        enabled = false;
       }
       let target = cfg.target;
       if (typeof target !== "string" || !target.trim()) {

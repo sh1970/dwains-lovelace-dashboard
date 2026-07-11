@@ -337,6 +337,7 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             target = (user_input.get("home_redirect_target", "/dwains-dashboard/home") or "/dwains-dashboard/home").strip()
             if not target.startswith("/"):
                 target = f"/{target}"
+            header["home_redirect_enabled"] = bool(user_input.get("home_redirect_enabled", False))
             header["home_redirect_target"] = target
             await self.hass.async_add_executor_job(_write_settings, path, header)
             self.hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
