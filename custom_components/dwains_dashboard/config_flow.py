@@ -46,6 +46,7 @@ AREA_VIEW_GROUPING_MODES = (
     AREA_VIEW_GROUPING_MODE_ENABLED,
     AREA_VIEW_GROUPING_MODE_DISABLED,
 )
+_TRANSLATION_CACHE = {}
 FALLBACK_SENSOR_DEVICE_CLASSES = [
     "apparent_power",
     "aqi",
@@ -162,17 +163,35 @@ def _translation_language_codes(hass):
     return list(dict.fromkeys(codes))
 
 
-def _translation(hass, path, fallback):
+def _load_translation_data(language_codes):
     translation_dir = os.path.join(os.path.dirname(__file__), "translations")
-    for language_code in _translation_language_codes(hass):
+    translations = []
+    for language_code in language_codes:
         translation_path = os.path.join(translation_dir, f"{language_code}.json")
         if not os.path.exists(translation_path):
             continue
         try:
             with open(translation_path, "r", encoding="utf-8") as f:
-                value = _nested_value(json.load(f), path)
+                translation_data = json.load(f)
         except Exception:
             continue
+        if isinstance(translation_data, dict):
+            translations.append(translation_data)
+    return translations
+
+
+async def _async_translation_data(hass):
+    language_codes = tuple(_translation_language_codes(hass))
+    if language_codes not in _TRANSLATION_CACHE:
+        _TRANSLATION_CACHE[language_codes] = await hass.async_add_executor_job(
+            _load_translation_data, language_codes
+        )
+    return _TRANSLATION_CACHE[language_codes]
+
+
+def _translation(translations, path, fallback):
+    for translation_data in translations:
+        value = _nested_value(translation_data, path)
         if isinstance(value, str):
             return value
     return fallback
@@ -220,7 +239,7 @@ def _area_binary_sensor_entities_from_input(value):
     return []
 
 
-def _sensor_device_class_options(hass):
+def _sensor_device_class_options(translations):
     values = []
     if SensorDeviceClass is not None:
         values = [device_class.value for device_class in SensorDeviceClass]
@@ -231,7 +250,7 @@ def _sensor_device_class_options(hass):
         {
             "value": device_class,
             "label": _translation(
-                hass,
+                translations,
                 f"selector.area_sensor_device_class.options.{device_class}",
                 device_class.replace("_", " ").title(),
             ),
@@ -240,7 +259,7 @@ def _sensor_device_class_options(hass):
     ]
 
 
-def _binary_sensor_device_class_options(hass):
+def _binary_sensor_device_class_options(translations):
     values = []
     if BinarySensorDeviceClass is not None:
         values = [device_class.value for device_class in BinarySensorDeviceClass]
@@ -251,7 +270,7 @@ def _binary_sensor_device_class_options(hass):
         {
             "value": device_class,
             "label": _translation(
-                hass,
+                translations,
                 f"selector.area_binary_sensor_device_class.options.{device_class}",
                 device_class.replace("_", " ").title(),
             ),
@@ -264,12 +283,12 @@ def _area_view_grouping_mode(value):
     return value if value in AREA_VIEW_GROUPING_MODES else AREA_VIEW_GROUPING_MODE_CLIENT
 
 
-def _area_view_grouping_mode_options(hass):
+def _area_view_grouping_mode_options(translations):
     return [
         {
             "value": AREA_VIEW_GROUPING_MODE_CLIENT,
             "label": _translation(
-                hass,
+                translations,
                 "selector.area_grouping_mode.options.client",
                 AREA_VIEW_GROUPING_MODE_CLIENT,
             ),
@@ -277,7 +296,7 @@ def _area_view_grouping_mode_options(hass):
         {
             "value": AREA_VIEW_GROUPING_MODE_ENABLED,
             "label": _translation(
-                hass,
+                translations,
                 "selector.area_grouping_mode.options.enabled",
                 AREA_VIEW_GROUPING_MODE_ENABLED,
             ),
@@ -285,7 +304,7 @@ def _area_view_grouping_mode_options(hass):
         {
             "value": AREA_VIEW_GROUPING_MODE_DISABLED,
             "label": _translation(
-                hass,
+                translations,
                 "selector.area_grouping_mode.options.disabled",
                 AREA_VIEW_GROUPING_MODE_DISABLED,
             ),
@@ -353,6 +372,7 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
 
         cur = await self.hass.async_add_executor_job(_read_settings, path)
         opts = self.config_entry.options
+        translations = await _async_translation_data(self.hass)
 
         def entity_default(key):
             val = cur.get(key)
@@ -372,14 +392,14 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             vol.Optional("home_redirect_target", default=(cur.get("home_redirect_target", "/dwains-dashboard/home") or "/dwains-dashboard/home")): str,
             vol.Optional("area_sensor_device_classes", default=_sensor_device_classes_to_input(cur)): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=_sensor_device_class_options(self.hass),
+                    options=_sensor_device_class_options(translations),
                     multiple=True,
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
             vol.Optional("area_binary_sensor_device_classes", default=_binary_sensor_device_classes_to_input(cur)): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=_binary_sensor_device_class_options(self.hass),
+                    options=_binary_sensor_device_class_options(translations),
                     multiple=True,
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
@@ -389,13 +409,13 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             ),
             vol.Optional("area_view_grouping_mode", default=_area_view_grouping_mode(cur.get("area_view_grouping_mode"))): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=_area_view_grouping_mode_options(self.hass),
+                    options=_area_view_grouping_mode_options(translations),
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
             vol.Optional("area_floor_grouping_mode", default=_area_view_grouping_mode(cur.get("area_floor_grouping_mode"))): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=_area_view_grouping_mode_options(self.hass),
+                    options=_area_view_grouping_mode_options(translations),
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
