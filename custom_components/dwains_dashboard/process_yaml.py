@@ -10,7 +10,6 @@ import jinja2
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
-from aiofiles.os import scandir
 
 #from homeassistant.util.yaml import Secrets, loader
 from annotatedyaml import loader

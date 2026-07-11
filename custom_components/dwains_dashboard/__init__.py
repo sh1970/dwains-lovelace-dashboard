@@ -30,7 +30,6 @@ from homeassistant.helpers import discovery
 from yaml.representer import Representer
 import collections
 import asyncio
-import aiofiles
 
 _LOGGER = logging.getLogger(__name__)
 
