@@ -589,8 +589,6 @@ def _normalize_area_sensor_device_classes(value):
         vol.Optional("invertCover"): bool,
         vol.Optional("alarmEntity"): str,
         vol.Optional("hideUnavailableEntities"): bool,
-        vol.Optional("homeRedirectEnabled"): bool,
-        vol.Optional("homeRedirectTarget"): str,
         vol.Optional("areaSensorDeviceClasses"): vol.Any([str], str),
 
     }
@@ -612,8 +610,6 @@ async def ws_handle_edit_homepage_header(
     hide_unavailable = msg.get("hideUnavailableEntities", homepage_header.get("hide_unavailable_entities", False))
     if isinstance(hide_unavailable, str):
         hide_unavailable = hide_unavailable.strip().lower() == "true"
-    home_redirect_enabled = msg.get("homeRedirectEnabled", homepage_header.get("home_redirect_enabled", False))
-    home_redirect_target = msg.get("homeRedirectTarget", homepage_header.get("home_redirect_target", "/dwains-dashboard/home"))
     area_sensor_device_classes = _normalize_area_sensor_device_classes(
         msg.get(
             "areaSensorDeviceClasses",
@@ -631,8 +627,6 @@ async def ws_handle_edit_homepage_header(
         "weather_entity": msg["weatherEntity"],
         "alarm_entity": msg["alarmEntity"],
         "hide_unavailable_entities": hide_unavailable,
-        "home_redirect_enabled": bool(home_redirect_enabled),
-        "home_redirect_target": str(home_redirect_target),
         "area_sensor_device_classes": area_sensor_device_classes,
     })
 

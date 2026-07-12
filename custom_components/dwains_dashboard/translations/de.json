@@ -32,8 +32,6 @@
           "weather_entity": "Wetter-Entität",
           "alarm_entity": "Alarm-Entität",
           "hide_unavailable_entities": "Nicht verfügbare Entitäten ausblenden",
-          "home_redirect_enabled": "Home-Weiterleitung aktivieren",
-          "home_redirect_target": "Ziel-URL der Home-Weiterleitung",
           "area_sensor_device_classes": "Sensorwerte unter dem Raumnamen",
           "area_binary_sensor_device_classes": "Binäre Sensorwerte unter dem Raumnamen",
           "area_binary_sensor_entities": "Explizite binäre Sensoren unter dem Raumnamen",

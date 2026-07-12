@@ -33,7 +33,6 @@ SETTINGS_BOOLS = (
     "disable_sensor_graph",
     "invert_cover",
     "hide_unavailable_entities",
-    "home_redirect_enabled",
 )
 SETTINGS_FILE = "dwains-dashboard/configs/settings.yaml"
 DEFAULT_AREA_SENSOR_DEVICE_CLASSES = ["temperature", "humidity"]
@@ -353,11 +352,6 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             header["area_floor_grouping_mode"] = _area_view_grouping_mode(
                 user_input.get("area_floor_grouping_mode", AREA_VIEW_GROUPING_MODE_CLIENT)
             )
-            target = (user_input.get("home_redirect_target", "/dwains-dashboard/home") or "/dwains-dashboard/home").strip()
-            if not target.startswith("/"):
-                target = f"/{target}"
-            header["home_redirect_enabled"] = bool(user_input.get("home_redirect_enabled", False))
-            header["home_redirect_target"] = target
             await self.hass.async_add_executor_job(_write_settings, path, header)
             self.hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
 
@@ -388,8 +382,6 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             vol.Optional("disable_sensor_graph", default=bool(cur.get("disable_sensor_graph", False))): selector.BooleanSelector(),
             vol.Optional("invert_cover", default=bool(cur.get("invert_cover", False))): selector.BooleanSelector(),
             vol.Optional("hide_unavailable_entities", default=bool(cur.get("hide_unavailable_entities", False))): selector.BooleanSelector(),
-            vol.Optional("home_redirect_enabled", default=bool(cur.get("home_redirect_enabled", False))): selector.BooleanSelector(),
-            vol.Optional("home_redirect_target", default=(cur.get("home_redirect_target", "/dwains-dashboard/home") or "/dwains-dashboard/home")): str,
             vol.Optional("area_sensor_device_classes", default=_sensor_device_classes_to_input(cur)): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=_sensor_device_class_options(translations),

@@ -32,8 +32,6 @@
           "weather_entity": "Weather entity",
           "alarm_entity": "Alarm entity",
           "hide_unavailable_entities": "Hide unavailable entities",
-          "home_redirect_enabled": "Enable home redirect",
-          "home_redirect_target": "Home redirect target URL",
           "area_sensor_device_classes": "Sensor values below area name",
           "area_binary_sensor_device_classes": "Binary sensor values below area name",
           "area_binary_sensor_entities": "Explicit binary sensors below area name",
