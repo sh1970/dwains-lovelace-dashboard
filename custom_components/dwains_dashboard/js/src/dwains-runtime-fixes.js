@@ -113,7 +113,7 @@ import { createCardElementSafe } from './helpers';
   // Robust hass getter to avoid a.mo() race
   window.__dd_get_hass = function() {
     try {
-      return (function() {
+      const h = (function() {
           var el = document.querySelector('home-assistant');
           return el && el.hass ? el.hass : undefined;
         })() ||
@@ -127,10 +127,77 @@ import { createCardElementSafe } from './helpers';
         })() ||
         window.hass ||
         undefined;
+      if (h && window.__dd_patch_hass_call_ws) window.__dd_patch_hass_call_ws(h);
+      return h;
     } catch (_) {
       return undefined;
     }
   };
+
+  // Deduplicate expensive read-only websocket calls during dashboard startup.
+  // HA can connect/mount DD3 cards more than once while Lovelace is still
+  // settling. Without this guard, homepage/navigation/devices cards may all ask
+  // for the same registries/configuration in parallel, which can delay
+  // "Dwains Dashboard Started" by several seconds on larger installs.
+  if (!window.__dd_patch_hass_call_ws) {
+    window.__dd_ws_read_cache = window.__dd_ws_read_cache || new Map();
+    window.__dd_ws_read_inflight = window.__dd_ws_read_inflight || new Map();
+    window.__dd_clear_ws_read_cache = function() {
+      try {
+        window.__dd_ws_read_cache.clear();
+        window.__dd_ws_read_inflight.clear();
+      } catch (_) {}
+    };
+    const READ_CACHE_TTL = 3000;
+    const READ_TYPES = new Set([
+      'dwains_dashboard/configuration/get',
+      'config/area_registry/list',
+      'config/device_registry/list',
+      'config/entity_registry/list',
+      'config/floor_registry/list',
+    ]);
+    const keyForMessage = function(msg) {
+      if (!msg || !READ_TYPES.has(msg.type)) return undefined;
+      try {
+        return JSON.stringify(msg);
+      } catch (_) {
+        return msg.type;
+      }
+    };
+    window.__dd_patch_hass_call_ws = function(h) {
+      try {
+        if (!h || typeof h.callWS !== 'function' || h.__dd_call_ws_patched) return h;
+        const originalCallWS = h.callWS.bind(h);
+        h.callWS = function(msg) {
+          const key = keyForMessage(msg);
+          if (!key) {
+            if (msg && typeof msg.type === 'string' && msg.type.startsWith('dwains_dashboard/')) {
+              window.__dd_clear_ws_read_cache();
+            }
+            return originalCallWS(msg);
+          }
+          const now = Date.now();
+          const cached = window.__dd_ws_read_cache.get(key);
+          if (cached && now - cached.ts < READ_CACHE_TTL) return Promise.resolve(cached.value);
+          const pending = window.__dd_ws_read_inflight.get(key);
+          if (pending) return pending;
+          const promise = originalCallWS(msg).then((result) => {
+            window.__dd_ws_read_cache.set(key, { ts: Date.now(), value: result });
+            return result;
+          }).finally(() => {
+            window.__dd_ws_read_inflight.delete(key);
+          });
+          window.__dd_ws_read_inflight.set(key, promise);
+          return promise;
+        };
+        h.__dd_call_ws_patched = true;
+      } catch (_) {}
+      return h;
+    };
+  }
+  try {
+    window.__dd_patch_hass_call_ws(window.__dd_get_hass && window.__dd_get_hass());
+  } catch (_) {}
 
   // Reliable loader for card helpers with retries/backoff
   if (!window.__dd_wait_card_helpers) window.__dd_wait_card_helpers = async function(maxTries = 20) {

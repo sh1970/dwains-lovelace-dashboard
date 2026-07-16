@@ -3,6 +3,7 @@ import yaml
 import json
 import os
 import shutil
+import time
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -37,6 +38,29 @@ areas = OrderedDict()
 entities = OrderedDict()
 devices = OrderedDict()
 homepage_header = OrderedDict()
+_configuration_cache = None
+_configuration_cache_ts = 0.0
+_CONFIGURATION_CACHE_TTL = 3.0
+
+def _clear_configuration_cache(*_args: Any) -> None:
+    """Clear the short-lived dashboard configuration cache."""
+    global _configuration_cache
+    global _configuration_cache_ts
+    _configuration_cache = None
+    _configuration_cache_ts = 0.0
+
+def _get_cached_configuration() -> Any:
+    if _configuration_cache is None:
+        return None
+    if time.monotonic() - _configuration_cache_ts > _CONFIGURATION_CACHE_TTL:
+        return None
+    return _configuration_cache
+
+def _set_cached_configuration(configuration: Any) -> None:
+    global _configuration_cache
+    global _configuration_cache_ts
+    _configuration_cache = configuration
+    _configuration_cache_ts = time.monotonic()
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     #_LOGGER.warning("async_setup")
@@ -55,6 +79,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     websocket_api.async_register_command(hass, websocket_get_configuration)
     websocket_api.async_register_command(hass, websocket_get_blueprints)
+    for event_type in (
+        "dwains_dashboard_reload",
+        "dwains_dashboard_config_reload",
+        "dwains_dashboard_homepage_card_reload",
+        "dwains_dashboard_devicespage_card_reload",
+        "dwains_dashboard_navigation_card_reload",
+    ):
+        hass.bus.async_listen(event_type, _clear_configuration_cache)
 
     websocket_api.async_register_command(hass, ws_handle_install_blueprint)
     websocket_api.async_register_command(hass, ws_handle_delete_blueprint)
@@ -108,6 +140,10 @@ async def websocket_get_configuration(
     msg: Mapping[str, Any],
 ) -> None:
     """Return a list of configuration."""
+    cached_configuration = _get_cached_configuration()
+    if cached_configuration is not None:
+        connection.send_result(msg["id"], cached_configuration)
+        return
 
     # Initialize all needed variables
     #areas = OrderedDict()
@@ -272,24 +308,23 @@ async def websocket_get_configuration(
 
     #_LOGGER.warning(f"websocket_get_configuration() {cards}")
 
-    connection.send_result(
-        msg["id"],
-        {
-            "areas": areas,
-            "area_cards": area_cards,
-            "device_cards": device_cards,
-            "entity_cards": entity_cards,
-            "entities_popup": entities_popup,
-            "entities": entities,
-            "devices": devices,
-            "homepage_header": homepage_header,
-            "more_pages": more_pages,
-            "installed_version": VERSION,
-            "devices_card": devices_card,
-            "devices_popup": devices_popup,
+    configuration = {
+        "areas": areas,
+        "area_cards": area_cards,
+        "device_cards": device_cards,
+        "entity_cards": entity_cards,
+        "entities_popup": entities_popup,
+        "entities": entities,
+        "devices": devices,
+        "homepage_header": homepage_header,
+        "more_pages": more_pages,
+        "installed_version": VERSION,
+        "devices_card": devices_card,
+        "devices_popup": devices_popup,
 
-        }
-    )
+    }
+    _set_cached_configuration(configuration)
+    connection.send_result(msg["id"], configuration)
 
 
 #get_blueprints

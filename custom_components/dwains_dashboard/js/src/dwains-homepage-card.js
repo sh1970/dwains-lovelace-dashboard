@@ -374,27 +374,34 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     async _loadData(){
       this.startedUp = false;
 
-      this.areas = await this._hass.callWS({
-        type: "config/area_registry/list"
-      });
-      this.devices = await this._hass.callWS({
-        type: "config/device_registry/list"
-      });
-      this.entities = await this._hass.callWS({
-        type: "config/entity_registry/list"
-      });
+      [
+        this.areas,
+        this.devices,
+        this.entities,
+        this.configuration,
+        this.floors,
+      ] = await Promise.all([
+        this._hass.callWS({
+          type: "config/area_registry/list"
+        }),
+        this._hass.callWS({
+          type: "config/device_registry/list"
+        }),
+        this._hass.callWS({
+          type: "config/entity_registry/list"
+        }),
+        this._hass.callWS({
+          type: 'dwains_dashboard/configuration/get'
+        }),
+        this._hass.callWS({
+          type: "config/floor_registry/list"
+        }).catch(() => []),
+      ]);
 	      this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
 	      this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
 
-      //Load configuration
-	      this.configuration = await this._hass.callWS({
-	        type: 'dwains_dashboard/configuration/get'
-	      });
       this._applyAreaViewGroupingPreference();
       this._applyAreaDisplayGroupingPreference();
-	      this.floors = await this._hass.callWS({
-	        type: "config/floor_registry/list"
-	      }).catch(() => []);
 
       const data = [];
       const disabledAreas = [];
@@ -412,21 +419,22 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
         loader.willUpdate(new Map());
         //End for the ha-icon-picker
 
-        this.notificationCard = await this.createCardElement2({
-          type: "custom:dwains-notification-card",
-          hass: this._hass,
-        });
-
-        this.badgesCard = await this.createCardElement2({
-          type: "custom:dwains-house-information-card",
-          hass: this._hass,
-        });
+        [this.notificationCard, this.badgesCard] = await Promise.all([
+          this.createCardElement2({
+            type: "custom:dwains-notification-card",
+            hass: this._hass,
+          }),
+          this.createCardElement2({
+            type: "custom:dwains-house-information-card",
+            hass: this._hass,
+          }),
+        ]);
 
 
         //Favorites load part
         if(this.configuration['entities']){
           const favoritesEntities = [];
-          Object.entries(this.configuration['entities']).map( async([entity,v]) => {
+          await Promise.all(Object.entries(this.configuration['entities']).map(async ([entity,v]) => {
             if(v['favorite']){
               const domain = computeDomain(entity);
               const hideEntity = this.configuration['entities'][entity] ? (this.configuration['entities'][entity]['hidden'] ? true : false) : false;
@@ -611,7 +619,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                 favorite_sort_order: (this.configuration['entities'][entity] && this.configuration['entities'][entity]['favorite_sort_order'] ? this.configuration['entities'][entity]['favorite_sort_order']: 99),
               });
             }
-          });
+          }));
 
           this.favorites = favoritesEntities;
         }
@@ -863,7 +871,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
             if(this.configuration.area_cards.length !== 0){
               if(this.configuration.area_cards[area.area_id]){
                 //console.log(Object.entries(this.configuration.area_cards[area.area_id]));
-                Object.entries(this.configuration.area_cards[area.area_id]).map(async ([k,v]) => {
+                await Promise.all(Object.entries(this.configuration.area_cards[area.area_id]).map(async ([k,v]) => {
                   const card = await this.createCardElement2(v);
                   const rowSpan = v["row_span"] ? v["row_span"] : "1";
                   const colSpan = v["col_span"] ? v["col_span"] : "1";
@@ -897,7 +905,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                       colSpanXl: colSpanXl,
                     });
                   }
-                });
+                }));
               }
             }
 

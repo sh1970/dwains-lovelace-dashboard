@@ -151,22 +151,27 @@ function getDwainsHass() {
 	          this.selectedArea = this.selectedArea || "";
 	          this.startedUp = false;
 
-          this.areas = await this._hass.callWS({
-            type: "config/area_registry/list"
-          });
-          this.devices = await this._hass.callWS({
-            type: "config/device_registry/list"
-          });
-          this.entities = await this._hass.callWS({
-            type: "config/entity_registry/list"
-          });
+          [
+            this.areas,
+            this.devices,
+            this.entities,
+            this.configuration,
+          ] = await Promise.all([
+            this._hass.callWS({
+              type: "config/area_registry/list"
+            }),
+            this._hass.callWS({
+              type: "config/device_registry/list"
+            }),
+            this._hass.callWS({
+              type: "config/entity_registry/list"
+            }),
+            this._hass.callWS({
+              type: 'dwains_dashboard/configuration/get'
+            }),
+          ]);
 	          this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
 	          this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
-
-          //Load configuration
-          this.configuration = await this._hass.callWS({
-            type: 'dwains_dashboard/configuration/get'
-          });
 
           if(this.areas == null || this.areas.length === 0
           || this.devices == null || this.devices.length === 0
@@ -232,7 +237,7 @@ function getDwainsHass() {
 
                       if(this.configuration.device_cards.length !== 0){
                         if(this.configuration.device_cards[domain]){
-                          Object.entries(this.configuration.device_cards[domain]).map(async ([k,v]) => {
+                          await Promise.all(Object.entries(this.configuration.device_cards[domain]).map(async ([k,v]) => {
                             const card = await this.createCardElement2(v);
                             const rowSpan = v["row_span"] ? v["row_span"] : "1";
                             const colSpan = v["col_span"] ? v["col_span"] : "1";
@@ -266,7 +271,7 @@ function getDwainsHass() {
                                 colSpanXl: colSpanXl,
                               });
                             }
-                          });
+                          }));
                         }
                       }
                       data[domain] = {
