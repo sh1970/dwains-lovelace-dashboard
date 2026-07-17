@@ -3,6 +3,7 @@ import { selectTree } from "card-tools/src/helpers";
 import { fireEvent } from "card-tools/src/event";
 import "card-tools/src/lovelace-element";
 import { createCardElementSafe } from './helpers';
+import { subtlePopupStyles } from './styles/dwains-subtle-style';
 
 export async function closePopUp() {
   const root = document.querySelector("home-assistant") || document.querySelector("hc-root");
@@ -129,7 +130,7 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
         }
 
         static get styles() {
-          return css`
+          return [css`
           ha-dialog {
             --mdc-dialog-min-width: 400px;
             --mdc-dialog-max-width: min(95vw, 960px);
@@ -208,7 +209,7 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
               max-width: calc(90vw - 32px);
             }
           }
-          `;
+          `, subtlePopupStyles(css)];
         }
 
       }

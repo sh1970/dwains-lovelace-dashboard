@@ -199,7 +199,7 @@ Promise.race(bases2).then(async () => {
 
         await this._loadBlueprints();
 
-        const ch = await window.loadCardHelpers();
+        const ch = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
         const c = await ch.createCardElement({ type: "button" });
         await c.constructor.getConfigElement();
       }

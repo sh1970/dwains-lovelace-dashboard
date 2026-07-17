@@ -59,6 +59,13 @@ import { createCardElementSafe } from './helpers';
   // at once. Once mounted it stays mounted (pairs with sticky areas: no re-fetch). ---
   if (window.customElements && !customElements.get('dd-lazy-card')) {
     class DDLazyCard extends HTMLElement {
+      set eager(value) {
+        this.__eager = !!value;
+        if (this.__eager && this.isConnected) this._mount();
+      }
+      get eager() {
+        return !!this.__eager;
+      }
       set card(c) {
         if (this.__c === c) return;
         this.__c = c;
@@ -78,6 +85,10 @@ import { createCardElementSafe } from './helpers';
       connectedCallback() {
         if (this.__mounted) return;
         this.style.display = 'block';
+        if (this.__eager || this.hasAttribute('eager')) {
+          this._mount();
+          return;
+        }
         if (!this.style.minHeight) this.style.minHeight = '48px';
         if (!this.__io && 'IntersectionObserver' in window) {
           this.__io = new IntersectionObserver((entries) => {
@@ -199,18 +210,38 @@ import { createCardElementSafe } from './helpers';
     window.__dd_patch_hass_call_ws(window.__dd_get_hass && window.__dd_get_hass());
   } catch (_) {}
 
-  // Reliable loader for card helpers with retries/backoff
+  // Reliable shared loader for card helpers with retries/backoff.
+  // Several editor dialogs need the same HA helper object. Cache the resolved
+  // helpers and share one pending promise instead of awaiting loadCardHelpers()
+  // repeatedly while opening/editing cards.
   if (!window.__dd_wait_card_helpers) window.__dd_wait_card_helpers = async function(maxTries = 20) {
-    for (let i = 0; i < maxTries; i++) {
-      try {
-        if (window.loadCardHelpers) {
-          const h = await window.loadCardHelpers();
-          if (h && typeof h.createCardElement === 'function') return h;
-        }
-      } catch (_) {}
-      await new Promise(r => setTimeout(r, i < 5 ? 100 : 300));
+    if (window.__dd_card_helpers && typeof window.__dd_card_helpers.createCardElement === 'function') {
+      return window.__dd_card_helpers;
     }
-    throw new Error('Card helpers not loaded');
+    if (window.__dd_card_helpers_promise) {
+      return window.__dd_card_helpers_promise;
+    }
+
+    window.__dd_card_helpers_promise = (async () => {
+      for (let i = 0; i < maxTries; i++) {
+        try {
+          if (window.loadCardHelpers) {
+            const h = await window.loadCardHelpers();
+            if (h && typeof h.createCardElement === 'function') {
+              window.__dd_card_helpers = h;
+              return h;
+            }
+          }
+        } catch (_) {}
+        await new Promise(r => setTimeout(r, i < 5 ? 100 : 300));
+      }
+      throw new Error('Card helpers not loaded');
+    })().catch((err) => {
+      window.__dd_card_helpers_promise = undefined;
+      throw err;
+    });
+
+    return window.__dd_card_helpers_promise;
   };
 
   // Close parent ha-dropdown (HA 2026 menu behavior)

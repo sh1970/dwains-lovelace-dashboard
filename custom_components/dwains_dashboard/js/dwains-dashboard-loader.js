@@ -9,6 +9,28 @@
     return path === "/dwains-dashboard" || path.startsWith("/dwains-dashboard/");
   };
 
+  const restoreDwainsRouteIfNeeded = () => {
+    if (isDwainsRoute()) return false;
+    try {
+      const restoreUntil = Number(localStorage.getItem("dwains_dashboard_restore_until"));
+      if (!restoreUntil || Date.now() > restoreUntil) return false;
+      const stored = localStorage.getItem("dwains_dashboard_last_url");
+      if (!stored) return false;
+      const storedUrl = new URL(stored, window.location.origin);
+      if (
+        storedUrl.origin !== window.location.origin
+        || (storedUrl.pathname !== "/dwains-dashboard" && !storedUrl.pathname.startsWith("/dwains-dashboard/"))
+      ) {
+        return false;
+      }
+      history.replaceState(history.state || null, "", `${storedUrl.pathname}${storedUrl.search}${storedUrl.hash}`);
+      window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: true } }));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
   const bundleUrl = () => {
     const url = new URL("/dwains_dashboard/js/dwains-dashboard.js", window.location.origin);
     try {
@@ -21,6 +43,7 @@
   };
 
   const load = () => {
+    restoreDwainsRouteIfNeeded();
     if (!isDwainsRoute() || window.__dd_route_bundle_requested) return;
     window.__dd_route_bundle_requested = true;
     import(bundleUrl()).catch((err) => {

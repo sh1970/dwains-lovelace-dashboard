@@ -38,7 +38,7 @@ function currentDwainsUrl() {
 
 const DWAINS_LAST_URL_KEY = "dwains_dashboard_last_url";
 const DWAINS_RESTORE_UNTIL_KEY = "dwains_dashboard_restore_until";
-const DWAINS_RESTORE_TTL = 15000;
+const DWAINS_RESTORE_TTL = 30000;
 
 class DwainsDashboard {
     constructor() {
@@ -51,6 +51,10 @@ class DwainsDashboard {
         window.addEventListener("popstate", updater);
         window.addEventListener("pagehide", () => this._markDwainsUrlRestore());
         window.addEventListener("beforeunload", () => this._markDwainsUrlRestore());
+        window.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "hidden") this._markDwainsUrlRestore();
+        });
+        window.addEventListener("freeze", () => this._markDwainsUrlRestore());
 
         this._subscribeReload();
     }

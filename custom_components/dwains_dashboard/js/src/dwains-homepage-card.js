@@ -22,6 +22,7 @@ import { computeDomain} from 'custom-card-helpers';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import translateEngine from './translate-engine';
 import { createCardElementSafe, resolveEntityName } from './helpers';
+import { subtleHomepageStyles } from './styles/dwains-subtle-style';
 
 function getDwainsHass() {
   return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
@@ -1917,7 +1918,9 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                       class="sensors text-gray"
                       title="${sensors.join(" - ")}"
                     >
-                      ${sensors.join(" - ")}
+                      ${sensors.map((sensor, index) => html`
+                        <span class="sensor-chip">${sensor}</span>${index < sensors.length - 1 ? html`<span class="sensor-separator"> - </span>` : ""}
+                      `)}
                     </div>`
                   : ""
                 }
@@ -2351,9 +2354,9 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
         });
 
         return html`
-          <div class="w-full mb-12 ${visible}" id="${data.area.area_id}">
-            <div class="flex justify-between">
-              <div class="sticky top-0">
+          <div class="dd-area-view w-full mb-12 ${visible}" id="${data.area.area_id}">
+            <div class="dd-area-view-header flex justify-between">
+              <div class="dd-area-view-title sticky top-0">
                 <h2 class="font-semibold text-lg">
                   ${data.area.name}
                 </h2>
@@ -2726,7 +2729,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
         }
 
         return html`
-            <div class="dd-homepage-horizontal-scroll">
+            <div class="dd-homepage-horizontal-scroll dd-dashboard-style-refresh">
             <div class="dd-homepage-columns flex flex-wrap">
               <div class="w-full ${this.configuration['homepage_header']['v2_mode'] ? "" : "lg-w-1-2 xl-w-1-3"} ${window.location.hash ? (this.configuration['homepage_header']['v2_mode'] ? "hidden" : "hidden lg-block") : ""} p-4">
                 <div class="dd-homepage-status mb-2">
@@ -2876,7 +2879,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     static get styles() {
-      return css`
+      return [css`
         .back-button {
           margin-right: 1rem;
           margin-bottom: 3.4rem;
@@ -3374,7 +3377,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
             grid-template-columns: repeat(5, minmax(0, 1fr))
           }
       }
-      `
+        `, subtleHomepageStyles(css)]
     }
 
 

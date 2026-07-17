@@ -354,6 +354,7 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             )
             await self.hass.async_add_executor_job(_write_settings, path, header)
             self.hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
+            self.hass.bus.async_fire("dwains_dashboard_navigation_card_reload")
 
             # Sidebar title/icon live in the entry options.
             return self.async_create_entry(

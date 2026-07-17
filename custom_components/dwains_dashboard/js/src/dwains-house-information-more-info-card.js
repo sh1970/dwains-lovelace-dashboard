@@ -132,6 +132,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
         super();
         this.areas = {};
         this._debounceTimer = null;
+        this._loadGeneration = 0;
 
     }
 
@@ -141,8 +142,13 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
     }
 
     async _debounceLoadCards() {
-        // Debounce periode in milliseconden
-        const debouncePeriod = 100;
+        if (!this._hass || !this._config) {
+            return;
+        }
+
+        // Keep a tiny async boundary so repeated hass updates are coalesced,
+        // but do not add a visible delay when opening the popup.
+        const debouncePeriod = 0;
 
         // Reset bestaande timer
         if (this._debounceTimer) {
@@ -156,6 +162,15 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
         }, debouncePeriod);
     }
 
+    async _loadCardHelpers() {
+        let cardHelpers = window.__dd_house_information_card_helpers;
+        cardHelpers = cardHelpers ? await cardHelpers : undefined;
+        if (!cardHelpers && typeof window.loadCardHelpers === 'function') {
+            cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
+        }
+        return cardHelpers;
+    }
+
     async setConfig(config) {
         if (!config.entities) {
             throw new Error("Specify entities list");
@@ -165,21 +180,34 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
         this.entities = config.entities;
         this.domain = config.domain;
         this.deviceClass = config.deviceClass;
+        this.configuration = config.configuration;
 
         // Asynchroon kaarthelpers laden
-        this.cardHelpers = await window.loadCardHelpers();
-        //await this.loadCards();
+        this.cardHelpers = await this._loadCardHelpers();
+        this._debounceLoadCards();
     }
 
     async loadCards() {
-        this.configuration = await this._hass.callWS({
-            type: 'dwains_dashboard/configuration/get'
-        });
+        const loadGeneration = ++this._loadGeneration;
+
+        if (!this.configuration) {
+            this.configuration = await this._hass.callWS({
+                type: 'dwains_dashboard/configuration/get'
+            });
+        }
+
+        if (!this.cardHelpers) {
+            this.cardHelpers = await this._loadCardHelpers();
+        }
+
+        if (loadGeneration !== this._loadGeneration) {
+            return;
+        }
 
         // Reset areas elke keer als kaarten geladen worden om enkel actieve gebieden te tonen
         this.areas = {};
 
-        for (const entityConfig of this.entities) {
+        const areaCards = await Promise.all(this.entities.map(async (entityConfig) => {
             const stateObj = this._hass.states[entityConfig.entity_id];
             let isOn = false;
 
@@ -222,14 +250,26 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
                     if (card) {
                         const areaId = entityConfig.area.area_id || 'default';
                         const areaName = entityConfig.area.name || 'Default';
-
-                        if (!this.areas[areaId]) {
-                            this.areas[areaId] = { cards: [], name: areaName }; // Voeg naam toe voor vriendelijke weergave
-                        }
-                        this.areas[areaId].cards.push(card);
+                        return { areaId, areaName, card };
                     }
                 }
             }
+            return null;
+        }));
+
+        if (loadGeneration !== this._loadGeneration) {
+            return;
+        }
+
+        for (const areaCard of areaCards) {
+            if (!areaCard) {
+                continue;
+            }
+
+            if (!this.areas[areaCard.areaId]) {
+                this.areas[areaCard.areaId] = { cards: [], name: areaCard.areaName }; // Voeg naam toe voor vriendelijke weergave
+            }
+            this.areas[areaCard.areaId].cards.push(areaCard.card);
         }
     }
 
