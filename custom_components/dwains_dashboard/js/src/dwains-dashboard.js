@@ -1,5 +1,4 @@
 import {
-    lovelace_view,
     hass
 } from "card-tools/src/hass";
 import { popUp } from "./dwains-popup";
@@ -29,13 +28,29 @@ function getDwainsHass() {
     return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
 }
 
+function isDwainsRoute(path = window.location.pathname) {
+    return path === "/dwains-dashboard" || path.startsWith("/dwains-dashboard/");
+}
+
+function currentDwainsUrl() {
+    return `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+const DWAINS_LAST_URL_KEY = "dwains_dashboard_last_url";
+const DWAINS_RESTORE_UNTIL_KEY = "dwains_dashboard_restore_until";
+const DWAINS_RESTORE_TTL = 15000;
+
 class DwainsDashboard {
     constructor() {
+        this._restoreDwainsUrlAfterAppReload();
         this.startDwainsDashboard();
+        this._rememberDwainsUrl();
 
         const updater = this.locationChanged.bind(this);
         window.addEventListener("location-changed", updater);
         window.addEventListener("popstate", updater);
+        window.addEventListener("pagehide", () => this._markDwainsUrlRestore());
+        window.addEventListener("beforeunload", () => this._markDwainsUrlRestore());
 
         this._subscribeReload();
     }
@@ -48,6 +63,61 @@ class DwainsDashboard {
         } else if ((this.__ddSubscribeRetries = (this.__ddSubscribeRetries || 0) + 1) <= 30) {
             setTimeout(() => this._subscribeReload(), 200);
         }
+    }
+
+    _rememberDwainsUrl() {
+        if (!isDwainsRoute()) return;
+        const url = currentDwainsUrl();
+        window.__ddLastDwainsUrl = url;
+        try {
+            sessionStorage.setItem(DWAINS_LAST_URL_KEY, url);
+        } catch (_) {}
+        try {
+            localStorage.setItem(DWAINS_LAST_URL_KEY, url);
+        } catch (_) {}
+    }
+
+    _markDwainsUrlRestore() {
+        if (!isDwainsRoute()) return;
+        this._rememberDwainsUrl();
+        try {
+            localStorage.setItem(DWAINS_RESTORE_UNTIL_KEY, String(Date.now() + DWAINS_RESTORE_TTL));
+        } catch (_) {}
+    }
+
+    _restoreDwainsUrlAfterAppReload() {
+        if (isDwainsRoute()) return;
+        try {
+            const restoreUntil = Number(localStorage.getItem(DWAINS_RESTORE_UNTIL_KEY));
+            if (!restoreUntil || Date.now() > restoreUntil) return;
+            const stored = localStorage.getItem(DWAINS_LAST_URL_KEY);
+            if (!stored) return;
+            const targetUrl = new URL(stored, window.location.origin);
+            if (!isDwainsRoute(targetUrl.pathname)) return;
+            const targetPath = `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
+            history.replaceState(history.state || null, "", targetPath);
+            window.__ddLastDwainsUrl = targetUrl.href;
+            window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: true } }));
+        } catch (_) {}
+    }
+
+    _lastDwainsUrl() {
+        try {
+            if (window.__ddReloadReturnUrl && isDwainsRoute(new URL(window.__ddReloadReturnUrl, window.location.origin).pathname)) {
+                return window.__ddReloadReturnUrl;
+            }
+        } catch (_) {}
+        if (isDwainsRoute()) return currentDwainsUrl();
+        if (window.__ddLastDwainsUrl) return window.__ddLastDwainsUrl;
+        try {
+            const stored = sessionStorage.getItem(DWAINS_LAST_URL_KEY);
+            if (stored && isDwainsRoute(new URL(stored, window.location.origin).pathname)) return stored;
+        } catch (_) {}
+        try {
+            const stored = localStorage.getItem(DWAINS_LAST_URL_KEY);
+            if (stored && isDwainsRoute(new URL(stored, window.location.origin).pathname)) return stored;
+        } catch (_) {}
+        return undefined;
     }
 
     async loadData() {
@@ -78,9 +148,9 @@ class DwainsDashboard {
 
     locationChanged() {
         let path = window.location.pathname;
-        let navPath = path.substring(1, path.lastIndexOf('/'));
 
-        if(navPath === "dwains-dashboard") {
+        if(isDwainsRoute(path)) {
+            this._rememberDwainsUrl();
             this.applyDwainsTheme();
             setTimeout(() => {this.buildDwainsNavigation();}, 500);
             document.querySelector("home-assistant").addEventListener("hass-more-info", this.popupCard.bind(this));
@@ -172,21 +242,46 @@ class DwainsDashboard {
         }
     }
 
-    reload() {
-        const ll = lovelace_view();
-        if (ll) fireEvent("config-refresh", {}, ll);
-        const reloadUrl = window.__ddReloadReturnUrl || window.location.href;
-        window.__ddReloadReturnUrl = undefined;
-        let path = window.location.pathname;
-        let navPath = path.substring(1, path.lastIndexOf('/'));
-        if (navPath === "dwains-dashboard") {
-            setTimeout(() => {
-                if (window.location.href !== reloadUrl) {
-                    history.replaceState(history.state || null, "", reloadUrl);
-                }
-                document.location.reload();
-            }, 1000);
+    async reload() {
+        this._markDwainsUrlRestore();
+        if (this.__ddReloading) {
+            this.__ddReloadAgain = true;
+            return;
         }
+        this.__ddReloading = true;
+        try {
+            do {
+                this.__ddReloadAgain = false;
+                await this._softReload();
+            } while (this.__ddReloadAgain);
+        } finally {
+            this.__ddReloading = false;
+        }
+    }
+
+    async _softReload() {
+        const reloadUrl = this._lastDwainsUrl();
+        window.__ddReloadReturnUrl = undefined;
+        if (reloadUrl) {
+            try {
+                const targetUrl = new URL(reloadUrl, window.location.origin);
+                const targetPath = `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
+                const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+                if (currentPath !== targetPath) {
+                    history.replaceState(history.state || null, "", targetPath);
+                    window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: true } }));
+                }
+                this._rememberDwainsUrl();
+            } catch (_) {}
+        }
+
+        try {
+            await this.loadData();
+        } catch (err) {
+            console.error("Failed to reload Dwains Dashboard data", err);
+        }
+        this.applyDwainsTheme();
+        setTimeout(() => {this.buildDwainsNavigation();}, 50);
     }
 
     async getLovelace() {
