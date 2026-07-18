@@ -32,13 +32,114 @@
           "weather_entity": "Wetter-Entität",
           "alarm_entity": "Alarm-Entität",
           "hide_unavailable_entities": "Nicht verfügbare Entitäten ausblenden",
-          "home_redirect_enabled": "Home-Weiterleitung aktivieren",
-          "home_redirect_target": "Ziel-URL der Home-Weiterleitung",
-          "area_sensor_device_classes": "Sensorwerte unter dem Raumnamen"
+          "area_sensor_device_classes": "Sensorwerte unter dem Raumnamen",
+          "area_binary_sensor_device_classes": "Binäre Sensorwerte unter dem Raumnamen",
+          "area_binary_sensor_entities": "Explizite binäre Sensoren unter dem Raumnamen",
+          "area_view_grouping_mode": "Gruppierung nach Entitäten",
+          "area_floor_grouping_mode": "Gruppierung nach Etagen"
         },
         "data_description": {
-          "area_sensor_device_classes": "Wähle die Sensor Device Classes aus, die auf Raumkacheln unter dem Raumnamen angezeigt werden sollen. Keine Auswahl bedeutet: nichts anzeigen."
+          "area_sensor_device_classes": "Wähle die Sensor Device Classes aus, die auf Raumkacheln unter dem Raumnamen angezeigt werden sollen. Keine Auswahl bedeutet: nichts anzeigen.",
+          "area_binary_sensor_device_classes": "Wähle Binary-Sensor Device Classes aus, die als Status nach den normalen Sensorwerten angezeigt werden sollen. Keine Auswahl bedeutet: nichts anzeigen.",
+          "area_binary_sensor_entities": "Wähle einzelne Binary-Sensor-Entitäten aus. Sie werden nur auf der Raumkachel angezeigt, wenn sie diesem Raum zugeordnet sind und aktiv sind.",
+          "area_view_grouping_mode": "Per Client nutzt die bisherige Browser-/Geräte-Einstellung. Aktiv oder Inaktiv erzwingt die Gruppierung global serverseitig.",
+          "area_floor_grouping_mode": "Per Client nutzt die bisherige Browser-/Geräte-Einstellung. Aktiv oder Inaktiv erzwingt die Gruppierung nach Etagen global serverseitig."
         }
+      }
+    }
+  },
+  "selector": {
+    "area_grouping_mode": {
+      "options": {
+        "client": "Per Client",
+        "enabled": "Aktiv",
+        "disabled": "Inaktiv"
+      }
+    },
+    "area_sensor_device_class": {
+      "options": {
+        "apparent_power": "Scheinleistung",
+        "aqi": "Luftqualitätsindex",
+        "atmospheric_pressure": "Luftdruck",
+        "battery": "Batterie",
+        "carbon_dioxide": "CO₂",
+        "carbon_monoxide": "Kohlenmonoxid",
+        "current": "Stromstärke",
+        "data_rate": "Datenrate",
+        "data_size": "Datenmenge",
+        "date": "Datum",
+        "distance": "Entfernung",
+        "duration": "Dauer",
+        "energy": "Energie",
+        "energy_storage": "Energiespeicher",
+        "enum": "Auswahlwert",
+        "frequency": "Frequenz",
+        "gas": "Gas",
+        "humidity": "Luftfeuchtigkeit",
+        "illuminance": "Beleuchtungsstärke",
+        "irradiance": "Bestrahlungsstärke",
+        "moisture": "Feuchtigkeit",
+        "monetary": "Geldwert",
+        "nitrogen_dioxide": "Stickstoffdioxid",
+        "nitrogen_monoxide": "Stickstoffmonoxid",
+        "nitrous_oxide": "Distickstoffmonoxid",
+        "ozone": "Ozon",
+        "pm1": "Feinstaub PM1",
+        "pm10": "Feinstaub PM10",
+        "pm25": "Feinstaub PM2.5",
+        "power": "Leistung",
+        "power_factor": "Leistungsfaktor",
+        "precipitation": "Niederschlag",
+        "precipitation_intensity": "Niederschlagsintensität",
+        "pressure": "Druck",
+        "reactive_power": "Blindleistung",
+        "signal_strength": "Signalstärke",
+        "sound_pressure": "Schalldruck",
+        "speed": "Geschwindigkeit",
+        "sulphur_dioxide": "Schwefeldioxid",
+        "temperature": "Temperatur",
+        "timestamp": "Zeitstempel",
+        "volatile_organic_compounds": "Flüchtige organische Verbindungen",
+        "volatile_organic_compounds_parts": "Flüchtige organische Verbindungen (Anteile)",
+        "voltage": "Spannung",
+        "volume": "Volumen",
+        "volume_flow_rate": "Volumenstrom",
+        "volume_storage": "Volumenspeicher",
+        "water": "Wasser",
+        "weight": "Gewicht",
+        "wind_speed": "Windgeschwindigkeit"
+      }
+    },
+    "area_binary_sensor_device_class": {
+      "options": {
+        "battery": "Batterie",
+        "battery_charging": "Batterie lädt",
+        "carbon_monoxide": "Kohlenmonoxid",
+        "cold": "Kälte",
+        "connectivity": "Verbindung",
+        "door": "Tür",
+        "garage_door": "Garagentor",
+        "gas": "Gas",
+        "heat": "Hitze",
+        "light": "Licht",
+        "lock": "Schloss",
+        "moisture": "Feuchtigkeit",
+        "motion": "Bewegung",
+        "moving": "Bewegt",
+        "occupancy": "Belegung",
+        "opening": "Öffnung",
+        "plug": "Stecker",
+        "power": "Strom",
+        "presence": "Anwesenheit",
+        "problem": "Problem",
+        "running": "Läuft",
+        "safety": "Sicherheit",
+        "smoke": "Rauch",
+        "sound": "Geräusch",
+        "tamper": "Manipulation",
+        "update": "Update",
+        "vibration": "Vibration",
+        "window": "Fenster"
       }
     }
   },

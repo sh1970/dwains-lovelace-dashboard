@@ -16,7 +16,7 @@ async def load_plugins(hass, name):
     # defined before HA renders the dashboard view (the big bundle loads async
     # and otherwise loses the race -> "Configuration error" on the whole view).
     add_extra_js_url(hass, f"/dwains_dashboard/js/dwains-dashboard-layout.js?version={VERSION}")
-    add_extra_js_url(hass, f"/dwains_dashboard/js/dwains-dashboard.js?version={VERSION}")
+    add_extra_js_url(hass, f"/dwains_dashboard/js/dwains-dashboard-loader.js?version={VERSION}")
 
     await hass.http.async_register_static_paths(
         [StaticPathConfig("/dwains_dashboard/js", hass.config.path(f"custom_components/{name}/js"), True)]

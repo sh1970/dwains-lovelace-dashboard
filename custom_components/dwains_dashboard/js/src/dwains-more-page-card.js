@@ -1,13 +1,15 @@
 import { popUp } from "./dwains-popup";
 import { fireEvent } from "card-tools/src/event";
 import { mdiDotsVertical } from "@mdi/js";
+import { navigate } from "custom-card-helpers";
 import { css, html, LitElement } from 'lit-element';
 import { createCardElementSafe } from './helpers';
+import { subtleBackButtonStyles } from './styles/dwains-subtle-style';
 //Herschreven
 class MorePageCard extends LitElement {
 
     static get styles() {
-        return css`
+        return [css`
         #more-page {
           padding: 1rem;
         }
@@ -30,7 +32,25 @@ class MorePageCard extends LitElement {
         .capitalize {
           text-transform: capitalize;
         }
-      `
+        .sticky {
+          position: sticky;
+        }
+        .z-30 {
+          z-index: 30;
+        }
+        .bottom-0 {
+          bottom: 0;
+        }
+        .text-right {
+          text-align: right;
+        }
+        .h-8 {
+          height: 2rem;
+        }
+        .w-8 {
+          width: 2rem;
+        }
+      `, subtleBackButtonStyles(css)]
     }
 
     static get properties() {
@@ -43,7 +63,7 @@ class MorePageCard extends LitElement {
 
     async loadHelpers() {
         if (typeof window.loadCardHelpers === 'function') {
-            this.cardHelpers = await window.loadCardHelpers();
+            this.cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
             return this.cardHelpers;
         } else {
             console.warn('loadCardHelpers is not available, ensure you are running a compatible version of Home Assistant');
@@ -151,6 +171,10 @@ class MorePageCard extends LitElement {
         }, 50);
     }
 
+    _backButtonClick() {
+        navigate(window, "/dwains-dashboard/more_page");
+    }
+
     render() {
         if (this.configuration == null || this.configuration.length === 0) {
             return html``;
@@ -191,6 +215,16 @@ class MorePageCard extends LitElement {
             </div>
 
             ${this.card}
+
+            <div class="sticky z-30 bottom-0 text-right">
+              <div @click=${this._backButtonClick} class="back-button">
+                <div class="button">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
           </div>
         `;
     }

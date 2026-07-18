@@ -22,10 +22,69 @@ import { computeDomain} from 'custom-card-helpers';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import translateEngine from './translate-engine';
 import { createCardElementSafe, resolveEntityName } from './helpers';
+import { subtleHomepageStyles } from './styles/dwains-subtle-style';
 
 function getDwainsHass() {
   return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
 }
+
+const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
+  cold: {
+    zero: "area_binary_sensor.summary.cold.zero",
+    one: "area_binary_sensor.summary.cold.one",
+    many: "area_binary_sensor.summary.cold.many",
+  },
+  door: {
+    zero: "area_binary_sensor.summary.door.zero",
+    one: "area_binary_sensor.summary.door.one",
+    many: "area_binary_sensor.summary.door.many",
+  },
+  garage_door: {
+    zero: "area_binary_sensor.summary.garage_door.zero",
+    one: "area_binary_sensor.summary.garage_door.one",
+    many: "area_binary_sensor.summary.garage_door.many",
+  },
+  lock: {
+    zero: "area_binary_sensor.summary.lock.zero",
+    one: "area_binary_sensor.summary.lock.one",
+    many: "area_binary_sensor.summary.lock.many",
+  },
+  moisture: {
+    zero: "area_binary_sensor.summary.moisture.zero",
+    one: "area_binary_sensor.summary.moisture.one",
+    many: "area_binary_sensor.summary.moisture.many",
+  },
+  motion: {
+    zero: "area_binary_sensor.summary.motion.zero",
+    one: "area_binary_sensor.summary.motion.one",
+    many: "area_binary_sensor.summary.motion.many",
+  },
+  safety: {
+    zero: "area_binary_sensor.summary.safety.zero",
+    one: "area_binary_sensor.summary.safety.one",
+    many: "area_binary_sensor.summary.safety.many",
+  },
+  smoke: {
+    zero: "area_binary_sensor.summary.smoke.zero",
+    one: "area_binary_sensor.summary.smoke.one",
+    many: "area_binary_sensor.summary.smoke.many",
+  },
+  sound: {
+    zero: "area_binary_sensor.summary.sound.zero",
+    one: "area_binary_sensor.summary.sound.one",
+    many: "area_binary_sensor.summary.sound.many",
+  },
+  vibration: {
+    zero: "area_binary_sensor.summary.vibration.zero",
+    one: "area_binary_sensor.summary.vibration.one",
+    many: "area_binary_sensor.summary.vibration.many",
+  },
+  window: {
+    zero: "area_binary_sensor.summary.window.zero",
+    one: "area_binary_sensor.summary.window.one",
+    many: "area_binary_sensor.summary.window.many",
+  },
+};
 
 
 	  class HomepageCard extends LitElement {
@@ -127,10 +186,52 @@ function getDwainsHass() {
       this.areaEditMode = false;
       this.favoriteEditMode = false;
       this.areaViewEditMode = false;
-      this.areaViewDisplayGrouped = Cookies.get('dwains_dashboard_areaViewDisplayGrouped') ? (Cookies.get('dwains_dashboard_areaViewDisplayGrouped') == "false" ? false : true) : false;
-      this.areaDisplayGrouped = Cookies.get('dwains_dashboard_areaDisplayGrouped') ? (Cookies.get('dwains_dashboard_areaDisplayGrouped') == "false" ? false : true) : false;
+      this.areaViewDisplayGrouped = this._areaViewDisplayGroupedFromClient();
+      this.areaDisplayGrouped = this._areaDisplayGroupedFromClient();
 
       this._config = config;
+    }
+
+    _areaViewDisplayGroupedFromClient(){
+      return Cookies.get('dwains_dashboard_areaViewDisplayGrouped') ? (Cookies.get('dwains_dashboard_areaViewDisplayGrouped') == "false" ? false : true) : false;
+    }
+
+    _areaViewGroupingMode(){
+      const header = this.configuration && this.configuration['homepage_header'] ? this.configuration['homepage_header'] : {};
+      const mode = header['area_view_grouping_mode'] || 'client';
+      return ['client', 'enabled', 'disabled'].includes(mode) ? mode : 'client';
+    }
+
+    _areaViewDisplayGroupedFromPreference(){
+      const mode = this._areaViewGroupingMode();
+      if(mode == 'enabled') return true;
+      if(mode == 'disabled') return false;
+      return this._areaViewDisplayGroupedFromClient();
+    }
+
+    _applyAreaViewGroupingPreference(){
+      this.areaViewDisplayGrouped = this._areaViewDisplayGroupedFromPreference();
+    }
+
+    _areaDisplayGroupedFromClient(){
+      return Cookies.get('dwains_dashboard_areaDisplayGrouped') ? (Cookies.get('dwains_dashboard_areaDisplayGrouped') == "false" ? false : true) : false;
+    }
+
+    _areaFloorGroupingMode(){
+      const header = this.configuration && this.configuration['homepage_header'] ? this.configuration['homepage_header'] : {};
+      const mode = header['area_floor_grouping_mode'] || 'client';
+      return ['client', 'enabled', 'disabled'].includes(mode) ? mode : 'client';
+    }
+
+    _areaDisplayGroupedFromPreference(){
+      const mode = this._areaFloorGroupingMode();
+      if(mode == 'enabled') return true;
+      if(mode == 'disabled') return false;
+      return this._areaDisplayGroupedFromClient();
+    }
+
+    _applyAreaDisplayGroupingPreference(){
+      this.areaDisplayGrouped = this._areaDisplayGroupedFromPreference();
     }
 
 	    async connectedCallback(){
@@ -274,25 +375,34 @@ function getDwainsHass() {
     async _loadData(){
       this.startedUp = false;
 
-      this.areas = await this._hass.callWS({
-        type: "config/area_registry/list"
-      });
-      this.devices = await this._hass.callWS({
-        type: "config/device_registry/list"
-      });
-      this.entities = await this._hass.callWS({
-        type: "config/entity_registry/list"
-      });
+      [
+        this.areas,
+        this.devices,
+        this.entities,
+        this.configuration,
+        this.floors,
+      ] = await Promise.all([
+        this._hass.callWS({
+          type: "config/area_registry/list"
+        }),
+        this._hass.callWS({
+          type: "config/device_registry/list"
+        }),
+        this._hass.callWS({
+          type: "config/entity_registry/list"
+        }),
+        this._hass.callWS({
+          type: 'dwains_dashboard/configuration/get'
+        }),
+        this._hass.callWS({
+          type: "config/floor_registry/list"
+        }).catch(() => []),
+      ]);
 	      this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
 	      this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
 
-      //Load configuration
-	      this.configuration = await this._hass.callWS({
-	        type: 'dwains_dashboard/configuration/get'
-	      });
-	      this.floors = await this._hass.callWS({
-	        type: "config/floor_registry/list"
-	      }).catch(() => []);
+      this._applyAreaViewGroupingPreference();
+      this._applyAreaDisplayGroupingPreference();
 
       const data = [];
       const disabledAreas = [];
@@ -310,21 +420,22 @@ function getDwainsHass() {
         loader.willUpdate(new Map());
         //End for the ha-icon-picker
 
-        this.notificationCard = await this.createCardElement2({
-          type: "custom:dwains-notification-card",
-          hass: this._hass,
-        });
-
-        this.badgesCard = await this.createCardElement2({
-          type: "custom:dwains-house-information-card",
-          hass: this._hass,
-        });
+        [this.notificationCard, this.badgesCard] = await Promise.all([
+          this.createCardElement2({
+            type: "custom:dwains-notification-card",
+            hass: this._hass,
+          }),
+          this.createCardElement2({
+            type: "custom:dwains-house-information-card",
+            hass: this._hass,
+          }),
+        ]);
 
 
         //Favorites load part
         if(this.configuration['entities']){
           const favoritesEntities = [];
-          Object.entries(this.configuration['entities']).map( async([entity,v]) => {
+          await Promise.all(Object.entries(this.configuration['entities']).map(async ([entity,v]) => {
             if(v['favorite']){
               const domain = computeDomain(entity);
               const hideEntity = this.configuration['entities'][entity] ? (this.configuration['entities'][entity]['hidden'] ? true : false) : false;
@@ -509,7 +620,7 @@ function getDwainsHass() {
                 favorite_sort_order: (this.configuration['entities'][entity] && this.configuration['entities'][entity]['favorite_sort_order'] ? this.configuration['entities'][entity]['favorite_sort_order']: 99),
               });
             }
-          });
+          }));
 
           this.favorites = favoritesEntities;
         }
@@ -761,7 +872,7 @@ function getDwainsHass() {
             if(this.configuration.area_cards.length !== 0){
               if(this.configuration.area_cards[area.area_id]){
                 //console.log(Object.entries(this.configuration.area_cards[area.area_id]));
-                Object.entries(this.configuration.area_cards[area.area_id]).map(async ([k,v]) => {
+                await Promise.all(Object.entries(this.configuration.area_cards[area.area_id]).map(async ([k,v]) => {
                   const card = await this.createCardElement2(v);
                   const rowSpan = v["row_span"] ? v["row_span"] : "1";
                   const colSpan = v["col_span"] ? v["col_span"] : "1";
@@ -795,7 +906,7 @@ function getDwainsHass() {
                       colSpanXl: colSpanXl,
                     });
                   }
-                });
+                }));
               }
             }
 
@@ -854,6 +965,7 @@ function getDwainsHass() {
       let uom;
       const values = entities.filter((entity) => {
         if (
+          !this._isAvailableEntity(entity) ||
           !entity.attributes.unit_of_measurement ||
           isNaN(Number(entity.state))
         ) {
@@ -1294,6 +1406,14 @@ function getDwainsHass() {
       ev.stopPropagation();
 
       const value = ev.currentTarget.value;
+      const mode = this._areaViewGroupingMode();
+      if(mode != 'client'){
+        this.areaViewDisplayGrouped = mode == 'enabled';
+        if(this.areaViewEditMode){
+          this._requestAreaViewSortableRebuild();
+        }
+        return;
+      }
       this.areaViewDisplayGrouped = value;
       Cookies.set('dwains_dashboard_areaViewDisplayGrouped', value, { expires: 365 });
       if(this.areaViewEditMode){
@@ -1306,6 +1426,11 @@ function getDwainsHass() {
       ev.stopPropagation();
 
       const value = ev.currentTarget.value;
+      const mode = this._areaFloorGroupingMode();
+      if(mode != 'client'){
+        this.areaDisplayGrouped = mode == 'enabled';
+        return;
+      }
       this.areaDisplayGrouped = value;
       Cookies.set('dwains_dashboard_areaDisplayGrouped', value, { expires: 365 });
     }
@@ -1579,6 +1704,157 @@ function getDwainsHass() {
 
       return ["temperature", "humidity"];
     }
+
+    _areaBinarySensorDeviceClasses() {
+      const header =
+        this.configuration && this.configuration["homepage_header"]
+          ? this.configuration["homepage_header"]
+          : {};
+      const value = header["area_binary_sensor_device_classes"];
+
+      if(Array.isArray(value)){
+        return value;
+      }
+      return value ? [value] : [];
+    }
+
+    _areaBinarySensorEntities() {
+      const header =
+        this.configuration && this.configuration["homepage_header"]
+          ? this.configuration["homepage_header"]
+          : {};
+      const value = header["area_binary_sensor_entities"];
+
+      if(Array.isArray(value)){
+        return value;
+      }
+      return value ? [value] : [];
+    }
+
+    _areaBinarySensorLabel(deviceClass) {
+      return translateEngine(this._hass, `device.${deviceClass}`, undefined, deviceClass.replace(/_/g, " "));
+    }
+
+    _translateAreaBinarySensorText(key, replacements = {}) {
+      let text = translateEngine(this._hass, key, undefined, key);
+      Object.entries(replacements).forEach(([replacementKey, replacementValue]) => {
+        text = text.replace(new RegExp(`\\{${replacementKey}\\}`, "g"), replacementValue);
+      });
+      return text;
+    }
+
+    _isAvailableEntity(entity) {
+      return entity && !UNAVAILABLE_STATES.includes(entity.state);
+    }
+
+    _isAvailableBinarySensor(entity) {
+      return this._isAvailableEntity(entity);
+    }
+
+    _areaBinarySensorSummary(deviceClass, activeCount) {
+      const summary = AREA_BINARY_SENSOR_SUMMARY_KEYS[deviceClass];
+      if(summary){
+        const key = activeCount === 0
+          ? summary.zero
+          : activeCount === 1
+            ? summary.one
+            : summary.many;
+        return this._translateAreaBinarySensorText(key, { count: activeCount });
+      }
+
+      const label = this._areaBinarySensorLabel(deviceClass);
+      if(activeCount === 0){
+        return this._translateAreaBinarySensorText("area_binary_sensor.summary.fallback.zero", { label });
+      }
+      if(activeCount === 1){
+        return this._translateAreaBinarySensorText("area_binary_sensor.summary.fallback.one", { label });
+      }
+      return this._translateAreaBinarySensorText("area_binary_sensor.summary.fallback.many", {
+        count: activeCount,
+        label,
+      });
+    }
+
+    _isActiveBinarySensor(entity) {
+      return (
+        this._isAvailableBinarySensor(entity) &&
+        !STATES_OFF.includes(entity.state)
+      );
+    }
+
+    _entityBelongsToArea(entityId, areaId) {
+      const entity = this.entitiesById && this.entitiesById.get(entityId)
+        ? this.entitiesById.get(entityId)
+        : (this.entities || []).find((entry) => entry.entity_id === entityId);
+      if(!entity){
+        return false;
+      }
+      if(entity.area_id){
+        return entity.area_id === areaId;
+      }
+      if(entity.device_id && this.devicesById){
+        const device = this.devicesById.get(entity.device_id);
+        return !!device && device.area_id === areaId;
+      }
+      return false;
+    }
+
+    _areaEntityIdsForArea(areaId) {
+      return (this.entities || [])
+        .filter((entity) => !entity.hidden_by)
+        .filter((entity) => this._entityBelongsToArea(entity.entity_id, areaId))
+        .filter((entity) => !(this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['disabled']))
+        .filter((entity) => this._hass.states[entity.entity_id])
+        .map((entity) => entity.entity_id);
+    }
+
+    _binarySensorStateLabel(entity) {
+      if(!entity){
+        return "";
+      }
+      const deviceClass = entity.attributes.device_class || "_";
+      return (
+        this._hass.localize(`component.binary_sensor.entity_component.${deviceClass}.state.${entity.state}`) ||
+        this._hass.localize(`component.binary_sensor.entity_component._.state.${entity.state}`) ||
+        entity.state
+      );
+    }
+
+    _areaBinarySensorValues(area) {
+      const areaId = area.area_id;
+      const entityIds = this._areaEntityIdsForArea(areaId);
+      const binarySensors = entityIds
+        .map((entityId) => this._hass.states[entityId])
+        .filter((entity) => entity && computeDomain(entity.entity_id) == "binary_sensor");
+      const values = [];
+
+      this._areaBinarySensorDeviceClasses().forEach((deviceClass) => {
+        const matchingSensors = binarySensors
+          .filter((entity) => entity.attributes.device_class === deviceClass)
+          .filter((entity) => this._isAvailableBinarySensor(entity));
+
+        if(matchingSensors.length > 0){
+          const count = matchingSensors
+            .filter((entity) => this._isActiveBinarySensor(entity))
+            .length;
+          values.push(this._areaBinarySensorSummary(deviceClass, count));
+        }
+      });
+
+      this._areaBinarySensorEntities().forEach((entityId) => {
+        if(!this._entityBelongsToArea(entityId, areaId)){
+          return;
+        }
+        const entity = this._hass.states[entityId];
+        if(!entity || UNAVAILABLE_STATES.includes(entity.state)){
+          return;
+        }
+        values.push(`${this._entityDisplayName(entityId)}: ${this._binarySensorStateLabel(entity)}`);
+      });
+
+      return values;
+    }
+
     _renderAreaButton(data){
       const entitiesByDomain = this._entitiesByDomain(
         data.entities
@@ -1597,12 +1873,14 @@ function getDwainsHass() {
               (entity) => entity.attributes.device_class === deviceClass
             )
           ) {
-            sensors.push(
-              this._average(entitiesByDomain, domain, deviceClass)
-            );
+            const average = this._average(entitiesByDomain, domain, deviceClass);
+            if(average){
+              sensors.push(average);
+            }
           }
         });
       });
+      sensors.push(...this._areaBinarySensorValues(data.area));
 
       const configuredArea = this.configuration['areas']
         ? this.configuration['areas'][data.area.area_id]
@@ -1640,7 +1918,9 @@ function getDwainsHass() {
                       class="sensors text-gray"
                       title="${sensors.join(" - ")}"
                     >
-                      ${sensors.join(" - ")}
+                      ${sensors.map((sensor, index) => html`
+                        <span class="sensor-chip">${sensor}</span>${index < sensors.length - 1 ? html`<span class="sensor-separator"> - </span>` : ""}
+                      `)}
                     </div>`
                   : ""
                 }
@@ -1835,6 +2115,12 @@ function getDwainsHass() {
 	        </div>
 	        `;
 	      } else {
+	        cards.sort(function (x, y) {
+          let a = x.grouped_sort_order,
+              b = y.grouped_sort_order;
+          return a == b ? 0 : a > b ? 1 : -1;
+        });
+
 	        let group = cards.reduce((r, a) => {
           //console.log("a", a);
           //console.log('r', r);
@@ -1850,12 +2136,6 @@ function getDwainsHass() {
          });
 
         //console.log("sortedgroup", sortedGroup);
-
-	        cards.sort(function (x, y) {
-          let a = x.grouped_sort_order,
-              b = y.grouped_sort_order;
-          return a == b ? 0 : a > b ? 1 : -1;
-        });
 
         //console.log(group);
 
@@ -2074,9 +2354,9 @@ function getDwainsHass() {
         });
 
         return html`
-          <div class="w-full mb-12 ${visible}" id="${data.area.area_id}">
-            <div class="flex justify-between">
-              <div class="sticky top-0">
+          <div class="dd-area-view w-full mb-12 ${visible}" id="${data.area.area_id}">
+            <div class="dd-area-view-header flex justify-between">
+              <div class="dd-area-view-title sticky top-0">
                 <h2 class="font-semibold text-lg">
                   ${data.area.name}
                 </h2>
@@ -2095,29 +2375,31 @@ function getDwainsHass() {
                     .path=${mdiDotsVertical}
                     slot="trigger"
                   ></ha-icon-button>
-                    ${!this.areaViewDisplayGrouped ? html `
-                      <ha-list-item
-                        graphic="icon"
-                        .value=${true}
-                        @click=${this._handleAreaViewDisplayGroupedClicked}
-                      >
-                        <div slot="graphic">
-                          <ha-icon .icon=${"mdi:format-list-group"}></ha-icon>
-                        </div>
-                        ${translateEngine(this._hass, 'entity.group')}
-                      </ha-list-item>` : html `
-                      <ha-list-item
-                        graphic="icon"
-                        .value=${false}
-                        @click=${this._handleAreaViewDisplayGroupedClicked}
-                      >
-                        <div slot="graphic">
-                        <ha-icon .icon=${"mdi:grid"}></ha-icon>
-                        </div>
-                        ${translateEngine(this._hass, 'entity.ungroup')}
-                      </ha-list-item>
-                      `
-                    }
+                    ${this._areaViewGroupingMode() == 'client' ? html`
+                      ${!this.areaViewDisplayGrouped ? html `
+                        <ha-list-item
+                          graphic="icon"
+                          .value=${true}
+                          @click=${this._handleAreaViewDisplayGroupedClicked}
+                        >
+                          <div slot="graphic">
+                            <ha-icon .icon=${"mdi:format-list-group"}></ha-icon>
+                          </div>
+                          ${translateEngine(this._hass, 'entity.group')}
+                        </ha-list-item>` : html `
+                        <ha-list-item
+                          graphic="icon"
+                          .value=${false}
+                          @click=${this._handleAreaViewDisplayGroupedClicked}
+                        >
+                          <div slot="graphic">
+                          <ha-icon .icon=${"mdi:grid"}></ha-icon>
+                          </div>
+                          ${translateEngine(this._hass, 'entity.ungroup')}
+                        </ha-list-item>
+                        `
+                      }
+                    ` : ""}
                     ${this._hass.user.is_admin ? html`
                       ${this.areaViewEditMode ? html `
                         <ha-list-item
@@ -2447,7 +2729,7 @@ function getDwainsHass() {
         }
 
         return html`
-            <div class="dd-homepage-horizontal-scroll">
+            <div class="dd-homepage-horizontal-scroll dd-dashboard-style-refresh">
             <div class="dd-homepage-columns flex flex-wrap">
               <div class="w-full ${this.configuration['homepage_header']['v2_mode'] ? "" : "lg-w-1-2 xl-w-1-3"} ${window.location.hash ? (this.configuration['homepage_header']['v2_mode'] ? "hidden" : "hidden lg-block") : ""} p-4">
                 <div class="dd-homepage-status mb-2">
@@ -2508,29 +2790,31 @@ function getDwainsHass() {
                           .path=${mdiDotsVertical}
                           slot="trigger"
                         ></ha-icon-button>
-                          ${!this.areaDisplayGrouped ? html `
-                            <ha-list-item
-                              graphic="icon"
-                              .value=${true}
-                              @click=${this._handleAreaDisplayGroupedClicked}
-                            >
-                              <div slot="graphic">
-                                <ha-icon .icon=${"mdi:format-list-group"}></ha-icon>
-                              </div>
-                              ${translateEngine(this._hass, 'area.group_by_floor')}
-                            </ha-list-item>` : html `
-                            <ha-list-item
-                              graphic="icon"
-                              .value=${false}
-                              @click=${this._handleAreaDisplayGroupedClicked}
-                            >
-                              <div slot="graphic">
-                              <ha-icon .icon=${"mdi:grid"}></ha-icon>
-                              </div>
-                              ${translateEngine(this._hass, 'area.ungroup_by_floor')}
-                            </ha-list-item>
-                            `
-                          }
+                          ${this._areaFloorGroupingMode() == 'client' ? html`
+                            ${!this.areaDisplayGrouped ? html `
+                              <ha-list-item
+                                graphic="icon"
+                                .value=${true}
+                                @click=${this._handleAreaDisplayGroupedClicked}
+                              >
+                                <div slot="graphic">
+                                  <ha-icon .icon=${"mdi:format-list-group"}></ha-icon>
+                                </div>
+                                ${translateEngine(this._hass, 'area.group_by_floor')}
+                              </ha-list-item>` : html `
+                              <ha-list-item
+                                graphic="icon"
+                                .value=${false}
+                                @click=${this._handleAreaDisplayGroupedClicked}
+                              >
+                                <div slot="graphic">
+                                <ha-icon .icon=${"mdi:grid"}></ha-icon>
+                                </div>
+                                ${translateEngine(this._hass, 'area.ungroup_by_floor')}
+                              </ha-list-item>
+                              `
+                            }
+                          ` : ""}
                           ${this._hass.user.is_admin ? html`
                             ${!this.areaEditMode ? html `
                               <ha-list-item
@@ -2595,7 +2879,7 @@ function getDwainsHass() {
     }
 
     static get styles() {
-      return css`
+      return [css`
         .back-button {
           margin-right: 1rem;
           margin-bottom: 3.4rem;
@@ -3093,7 +3377,7 @@ function getDwainsHass() {
             grid-template-columns: repeat(5, minmax(0, 1fr))
           }
       }
-      `
+        `, subtleHomepageStyles(css)]
     }
 
 

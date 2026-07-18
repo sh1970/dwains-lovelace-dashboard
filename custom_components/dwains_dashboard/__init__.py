@@ -3,6 +3,7 @@ import yaml
 import json
 import os
 import shutil
+import time
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -30,7 +31,6 @@ from homeassistant.helpers import discovery
 from yaml.representer import Representer
 import collections
 import asyncio
-import aiofiles
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +38,29 @@ areas = OrderedDict()
 entities = OrderedDict()
 devices = OrderedDict()
 homepage_header = OrderedDict()
+_configuration_cache = None
+_configuration_cache_ts = 0.0
+_CONFIGURATION_CACHE_TTL = 3.0
+
+def _clear_configuration_cache(*_args: Any) -> None:
+    """Clear the short-lived dashboard configuration cache."""
+    global _configuration_cache
+    global _configuration_cache_ts
+    _configuration_cache = None
+    _configuration_cache_ts = 0.0
+
+def _get_cached_configuration() -> Any:
+    if _configuration_cache is None:
+        return None
+    if time.monotonic() - _configuration_cache_ts > _CONFIGURATION_CACHE_TTL:
+        return None
+    return _configuration_cache
+
+def _set_cached_configuration(configuration: Any) -> None:
+    global _configuration_cache
+    global _configuration_cache_ts
+    _configuration_cache = configuration
+    _configuration_cache_ts = time.monotonic()
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     #_LOGGER.warning("async_setup")
@@ -56,6 +79,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     websocket_api.async_register_command(hass, websocket_get_configuration)
     websocket_api.async_register_command(hass, websocket_get_blueprints)
+    for event_type in (
+        "dwains_dashboard_reload",
+        "dwains_dashboard_config_reload",
+        "dwains_dashboard_homepage_card_reload",
+        "dwains_dashboard_devicespage_card_reload",
+        "dwains_dashboard_navigation_card_reload",
+    ):
+        hass.bus.async_listen(event_type, _clear_configuration_cache)
 
     websocket_api.async_register_command(hass, ws_handle_install_blueprint)
     websocket_api.async_register_command(hass, ws_handle_delete_blueprint)
@@ -109,6 +140,10 @@ async def websocket_get_configuration(
     msg: Mapping[str, Any],
 ) -> None:
     """Return a list of configuration."""
+    cached_configuration = _get_cached_configuration()
+    if cached_configuration is not None:
+        connection.send_result(msg["id"], cached_configuration)
+        return
 
     # Initialize all needed variables
     #areas = OrderedDict()
@@ -273,24 +308,23 @@ async def websocket_get_configuration(
 
     #_LOGGER.warning(f"websocket_get_configuration() {cards}")
 
-    connection.send_result(
-        msg["id"],
-        {
-            "areas": areas,
-            "area_cards": area_cards,
-            "device_cards": device_cards,
-            "entity_cards": entity_cards,
-            "entities_popup": entities_popup,
-            "entities": entities,
-            "devices": devices,
-            "homepage_header": homepage_header,
-            "more_pages": more_pages,
-            "installed_version": VERSION,
-            "devices_card": devices_card,
-            "devices_popup": devices_popup,
+    configuration = {
+        "areas": areas,
+        "area_cards": area_cards,
+        "device_cards": device_cards,
+        "entity_cards": entity_cards,
+        "entities_popup": entities_popup,
+        "entities": entities,
+        "devices": devices,
+        "homepage_header": homepage_header,
+        "more_pages": more_pages,
+        "installed_version": VERSION,
+        "devices_card": devices_card,
+        "devices_popup": devices_popup,
 
-        }
-    )
+    }
+    _set_cached_configuration(configuration)
+    connection.send_result(msg["id"], configuration)
 
 
 #get_blueprints
@@ -590,8 +624,6 @@ def _normalize_area_sensor_device_classes(value):
         vol.Optional("invertCover"): bool,
         vol.Optional("alarmEntity"): str,
         vol.Optional("hideUnavailableEntities"): bool,
-        vol.Optional("homeRedirectEnabled"): bool,
-        vol.Optional("homeRedirectTarget"): str,
         vol.Optional("areaSensorDeviceClasses"): vol.Any([str], str),
 
     }
@@ -613,8 +645,6 @@ async def ws_handle_edit_homepage_header(
     hide_unavailable = msg.get("hideUnavailableEntities", homepage_header.get("hide_unavailable_entities", False))
     if isinstance(hide_unavailable, str):
         hide_unavailable = hide_unavailable.strip().lower() == "true"
-    home_redirect_enabled = msg.get("homeRedirectEnabled", homepage_header.get("home_redirect_enabled", False))
-    home_redirect_target = msg.get("homeRedirectTarget", homepage_header.get("home_redirect_target", "/dwains-dashboard/home"))
     area_sensor_device_classes = _normalize_area_sensor_device_classes(
         msg.get(
             "areaSensorDeviceClasses",
@@ -632,8 +662,6 @@ async def ws_handle_edit_homepage_header(
         "weather_entity": msg["weatherEntity"],
         "alarm_entity": msg["alarmEntity"],
         "hide_unavailable_entities": hide_unavailable,
-        "home_redirect_enabled": bool(home_redirect_enabled),
-        "home_redirect_target": str(home_redirect_target),
         "area_sensor_device_classes": area_sensor_device_classes,
     })
 
@@ -1489,11 +1517,13 @@ async def ws_handle_edit_more_page(
     #hass.services.call(DOMAIN, "reload")
 
     await reload_configuration(hass)
+    hass.bus.async_fire("dwains_dashboard_more_pages_reload")
 
     connection.send_result(
         msg["id"],
         {
-            "succesfull": "More page saved succesfully"
+            "succesfull": "More page saved succesfully",
+            "foldername": more_page_folder,
         },
     )
 
@@ -1525,6 +1555,7 @@ async def ws_handle_remove_more_page(
     await reload_configuration(hass)
 
     hass.bus.async_fire("dwains_dashboard_reload")
+    hass.bus.async_fire("dwains_dashboard_more_pages_reload")
 
     connection.send_result(
         msg["id"],

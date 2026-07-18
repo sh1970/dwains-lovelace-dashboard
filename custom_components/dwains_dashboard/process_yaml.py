@@ -10,7 +10,6 @@ import jinja2
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
-from aiofiles.os import scandir
 
 #from homeassistant.util.yaml import Secrets, loader
 from annotatedyaml import loader
@@ -107,6 +106,8 @@ async def process_yaml(hass: HomeAssistant, config_entry):
     """Process all YAML files for Dwains Dashboard."""
     #_LOGGER.warning('Start of function to process all yaml files!')
 
+    dwains_dashboard_more_pages.clear()
+
     # Check for HKI installation
     if os.path.exists(hass.config.path("hki-user/config")):
         #_LOGGER.warning("HKI Installed!")
@@ -175,6 +176,8 @@ async def process_yaml(hass: HomeAssistant, config_entry):
 
 async def reload_configuration(hass):
     _LOGGER.warning('Reload YAML configuration files...!')
+
+    dwains_dashboard_more_pages.clear()
 
     if os.path.exists(hass.config.path("dwains-dashboard/configs")):
         if os.path.isdir(hass.config.path("dwains-dashboard/configs/more_pages")):

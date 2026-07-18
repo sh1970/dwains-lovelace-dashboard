@@ -1,10 +1,11 @@
 import { LitElement, html, css } from 'lit';
 import { navigate } from 'custom-card-helpers';
 import translateEngine from './translate-engine';
+import { subtleNavigationStyles } from './styles/dwains-subtle-style';
 //Herschreven
 class DwainsNavigationCard extends LitElement {
     static get styles() {
-        return css`
+        return [css`
         :host {
             width: -webkit-fill-available;
             display: flex;
@@ -85,7 +86,7 @@ class DwainsNavigationCard extends LitElement {
                 padding: 0.75rem;
             }
         }
-        `;
+        `, subtleNavigationStyles(css)];
       }
 
     static get properties() {
@@ -161,7 +162,6 @@ class DwainsNavigationCard extends LitElement {
         if (this.isLoading || !this.configuration) {
             return html``; // Laadindicator of een alternatieve tekst
         }
-
         const more_pages = Object.entries(this.configuration['more_pages']).sort(function (x, y) {
             let a = x[1] && x[1].sort_order ? x[1].sort_order : 99,
                 b = y[1] && y[1].sort_order ? y[1].sort_order : 99;

@@ -8,6 +8,7 @@ import { mdiDotsVertical, mdiNotePlus, mdiCog } from "@mdi/js";
 import { css, html, LitElement } from 'lit-element';
 import translateEngine from './translate-engine';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
+import { subtleMorePagesStyles } from './styles/dwains-subtle-style';
 
 const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
 Promise.race(bases2).then(async () => {
@@ -124,12 +125,22 @@ Promise.race(bases2).then(async () => {
 
         }
         _handleRemoveMorePageClicked(ev){
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          ev.stopPropagation();
+          const morePage = ev.currentTarget.more_page;
           this._hass.connection.sendMessagePromise({
             type: 'dwains_dashboard/remove_more_page',
-            foldername: ev.currentTarget.more_page,
+            foldername: morePage,
           }).then(
-              (resp) => {
+              async (resp) => {
                   console.log(resp);
+                  if(this.configuration && this.configuration.more_pages && this.configuration.more_pages[morePage]){
+                    const morePages = {...this.configuration.more_pages};
+                    delete morePages[morePage];
+                    this.configuration = {...this.configuration, more_pages: morePages};
+                    this.requestUpdate();
+                  }
+                  await this._reloadCard();
               },
               (err) => {
                   console.error('Message failed!', err);
@@ -273,7 +284,7 @@ Promise.race(bases2).then(async () => {
 
             //console.log(1,this.configuration['more_pages']);
             return html`
-                <div id="more_pages" class="p-4">
+                <div id="more_pages" class="p-4 dd-dashboard-style-refresh">
                     <div class="flex justify-between mb-2">
                     <div>
                         <h2 class="font-semibold text-lg capitalize">
@@ -342,7 +353,7 @@ Promise.race(bases2).then(async () => {
         }
 
         static get styles() {
-          return css`
+          return [css`
             .sortable-move {
               cursor: -webkit-grabbing;
               cursor: grab;
@@ -714,7 +725,7 @@ Promise.race(bases2).then(async () => {
                   grid-template-columns: repeat(4, minmax(0, 1fr))
               }
           }
-          `
+          `, subtleMorePagesStyles(css)]
         }
 
 

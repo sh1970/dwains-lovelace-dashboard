@@ -114,6 +114,8 @@ export const DOMAIN_STATE_ICONS = {
     weather: "mdi:weather-cloudy",
     automation: "mdi:robot-outline",
     alarm_control_panel: "mdi:shield-home",
+    siren: "mdi:alarm-light-outline",
+    unknown: "mdi:help-circle-outline",
     text: "mdi:format-text",
     event: "mdi:calendar-clock",
     update: "mdi:cloud-upload",

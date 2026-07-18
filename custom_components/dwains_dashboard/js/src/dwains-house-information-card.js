@@ -18,10 +18,11 @@ import {
 } from './variables';
 import translateEngine from './translate-engine';
 import { myComputeStateDisplay, resolveEntityName } from "./helpers";
+import { subtleHouseInformationStyles } from './styles/dwains-subtle-style';
 //Herschreven
 class DwainsHouseInformationCard extends LitElement {
     static get styles() {
-        return css`
+        return [css`
       ha-card {
         overflow: hidden;
       }
@@ -151,7 +152,7 @@ class DwainsHouseInformationCard extends LitElement {
       .loading-component {
         height: 110px;
       }
-      `
+    `, subtleHouseInformationStyles(css)]
     }
 
     static get properties() {
@@ -197,22 +198,37 @@ class DwainsHouseInformationCard extends LitElement {
     }
 
     async _loadData() {
-        this.areas = await this._hass.callWS({
-            type: "config/area_registry/list"
-        });
-        this.devices = await this._hass.callWS({
-            type: "config/device_registry/list"
-        });
-        this.entities = await this._hass.callWS({
-            type: "config/entity_registry/list"
-        });
+        const [areas, devices, entities, configuration] = await Promise.all([
+            this._hass.callWS({
+                type: "config/area_registry/list"
+            }),
+            this._hass.callWS({
+                type: "config/device_registry/list"
+            }),
+            this._hass.callWS({
+                type: "config/entity_registry/list"
+            }),
+            this._hass.callWS({
+                type: 'dwains_dashboard/configuration/get'
+            }),
+        ]);
+
+        this.areas = areas;
+        this.devices = devices;
+        this.entities = entities;
+        this.configuration = configuration;
+
 	    this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
 	    this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
 
-        //Load configuration
-        this.configuration = await this._hass.callWS({
-            type: 'dwains_dashboard/configuration/get'
-        });
+        if (!window.__dd_house_information_card_helpers && typeof window.loadCardHelpers === 'function') {
+            window.__dd_house_information_card_helpers = (
+                window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers()
+            ).catch(() => {
+                window.__dd_house_information_card_helpers = undefined;
+                return undefined;
+            });
+        }
 
         if (this.areas == null || this.areas.length === 0
             || this.devices == null || this.devices.length === 0
@@ -328,6 +344,7 @@ class DwainsHouseInformationCard extends LitElement {
                     domain: domain,
                     entities: entities,
                     deviceClass: domain === 'climate' ? '' : deviceClass,
+                    configuration: this.configuration,
                 }, true, '');
             }, 50);
         }

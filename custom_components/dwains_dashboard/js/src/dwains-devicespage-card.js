@@ -13,6 +13,7 @@ import { css, html, LitElement } from 'lit-element';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import translateEngine from './translate-engine';
 import { createCardElementSafe, resolveEntityName } from './helpers';
+import { subtleBackButtonStyles, subtleDevicesPageStyles } from './styles/dwains-subtle-style';
 
 function getDwainsHass() {
   return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
@@ -151,22 +152,27 @@ function getDwainsHass() {
 	          this.selectedArea = this.selectedArea || "";
 	          this.startedUp = false;
 
-          this.areas = await this._hass.callWS({
-            type: "config/area_registry/list"
-          });
-          this.devices = await this._hass.callWS({
-            type: "config/device_registry/list"
-          });
-          this.entities = await this._hass.callWS({
-            type: "config/entity_registry/list"
-          });
+          [
+            this.areas,
+            this.devices,
+            this.entities,
+            this.configuration,
+          ] = await Promise.all([
+            this._hass.callWS({
+              type: "config/area_registry/list"
+            }),
+            this._hass.callWS({
+              type: "config/device_registry/list"
+            }),
+            this._hass.callWS({
+              type: "config/entity_registry/list"
+            }),
+            this._hass.callWS({
+              type: 'dwains_dashboard/configuration/get'
+            }),
+          ]);
 	          this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
 	          this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
-
-          //Load configuration
-          this.configuration = await this._hass.callWS({
-            type: 'dwains_dashboard/configuration/get'
-          });
 
           if(this.areas == null || this.areas.length === 0
           || this.devices == null || this.devices.length === 0
@@ -232,7 +238,7 @@ function getDwainsHass() {
 
                       if(this.configuration.device_cards.length !== 0){
                         if(this.configuration.device_cards[domain]){
-                          Object.entries(this.configuration.device_cards[domain]).map(async ([k,v]) => {
+                          await Promise.all(Object.entries(this.configuration.device_cards[domain]).map(async ([k,v]) => {
                             const card = await this.createCardElement2(v);
                             const rowSpan = v["row_span"] ? v["row_span"] : "1";
                             const colSpan = v["col_span"] ? v["col_span"] : "1";
@@ -266,7 +272,7 @@ function getDwainsHass() {
                                 colSpanXl: colSpanXl,
                               });
                             }
-                          });
+                          }));
                         }
                       }
                       data[domain] = {
@@ -1075,33 +1081,32 @@ function getDwainsHass() {
           `;
         }
 
-        _renderDeviceButton(data){
-          //console.log(data.domain);
-          return html`
-            <div class="relative" data-device='${data.domain}'>
-              <div
-                class="flex justify-between h-44 p-3 device-button ${this.selectedDevice == data.domain && !this.configuration['homepage_header']['v2_mode'] ? 'current' : ''}"
-                data-device=${data.domain}
-                @click=${this._handleDeviceClick}
-              >
-                <div class="h-full flex flex-wrap content-between">
-                  <div class="w-full ha-icon">
-                    ${this.configuration['devices'][data.domain] && this.configuration['devices'][data.domain]['icon'] ? html`
-                      <ha-icon
-                        class="h-14 w-14"
-                        style="color: var(--primary-color);"
-                        .icon=${this.configuration['devices'][data.domain]['icon']}
-                      ></ha-icon>`
-                      : html`${DOMAIN_ICONS[data.domain] ? html`<ha-icon
-                          class="h-14 w-14"
-                          style="color: var(--primary-color);"
-                          .icon=${DOMAIN_ICONS[data.domain]}></ha-icon>` : ""}`
-                    }
-                  </div>
-                  <div class="w-full">
-                    <h3 class="font-semibold text-lg capitalize">${translateEngine(this._hass, 'device.'+data.domain)}</h3>
-                  </div>
-                </div>
+    _renderDeviceButton(data){
+      //console.log(data.domain);
+      const deviceDomain = data.domain || "unknown";
+      const deviceIcon = this.configuration['devices'][deviceDomain] && this.configuration['devices'][deviceDomain]['icon']
+        ? this.configuration['devices'][deviceDomain]['icon']
+        : (DOMAIN_ICONS[deviceDomain] ? DOMAIN_ICONS[deviceDomain] : DOMAIN_ICONS["unknown"]);
+      return html`
+        <div class="relative" data-device='${deviceDomain}'>
+          <div
+            class="flex justify-between h-44 p-3 device-button ${this.selectedDevice == deviceDomain && !this.configuration['homepage_header']['v2_mode'] ? 'current' : ''}"
+            data-device=${deviceDomain}
+            @click=${this._handleDeviceClick}
+          >
+            <div class="h-full flex flex-wrap content-between">
+              <div class="w-full ha-icon">
+                ${deviceIcon ? html`
+                  <ha-icon
+                    class="h-14 w-14"
+                    style="color: var(--primary-color);"
+                    .icon=${deviceIcon}
+                  ></ha-icon>` : ""}
+              </div>
+              <div class="w-full">
+                <h3 class="font-semibold text-lg capitalize">${translateEngine(this._hass, 'device.'+deviceDomain)}</h3>
+              </div>
+            </div>
                 <div class="row-span-2 text-right space-y-0.5 info">
 
                 </div>
@@ -1127,10 +1132,10 @@ function getDwainsHass() {
                       ></ha-icon-button>
                         <ha-list-item
                           graphic="icon"
-                          .device=${data.domain}
-                          .device_icon=${this.configuration['devices'][data.domain] && this.configuration['devices'][data.domain]['icon'] ? this.configuration['devices'][data.domain]['icon'] : (DOMAIN_ICONS[data.domain] ? DOMAIN_ICONS[data.domain] : "")}
-                          .showInNavbar=${this.configuration['devices'][data.domain] && this.configuration['devices'][data.domain]['show_in_navbar'] ? this.configuration['devices'][data.domain]['show_in_navbar'] : ""}
-                          @click=${this._handleDeviceEditClick}
+                      .device=${deviceDomain}
+                      .device_icon=${deviceIcon}
+                      .showInNavbar=${this.configuration['devices'][deviceDomain] && this.configuration['devices'][deviceDomain]['show_in_navbar'] ? this.configuration['devices'][deviceDomain]['show_in_navbar'] : ""}
+                      @click=${this._handleDeviceEditClick}
                         >
                           <div slot="graphic">
                             <ha-icon .icon=${"mdi:cog"}></ha-icon>
@@ -1140,8 +1145,8 @@ function getDwainsHass() {
 
                         <ha-list-item
                           graphic="icon"
-                          .domain=${data.domain}
-                          @click="${this._handleDeviceEditCardClick}"
+                      .domain=${deviceDomain}
+                      @click="${this._handleDeviceEditCardClick}"
                         >
                           <div slot="graphic">
                             <ha-icon .icon=${"mdi:pencil"}></ha-icon>
@@ -1150,8 +1155,8 @@ function getDwainsHass() {
                         </ha-list-item>
                         <ha-list-item
                           graphic="icon"
-                          .domain=${data.domain}
-                          @click="${this._handleDeviceEditPopupClick}"
+                      .domain=${deviceDomain}
+                      @click="${this._handleDeviceEditPopupClick}"
                         >
                           <div slot="graphic">
                             <ha-icon .icon=${"mdi:pencil-box-multiple"}></ha-icon>
@@ -1160,8 +1165,8 @@ function getDwainsHass() {
                         </ha-list-item>
                         <ha-list-item
                           graphic="icon"
-                          .device=${data.domain}
-                          .key=${"hidden"}
+                      .device=${deviceDomain}
+                      .key=${"hidden"}
                           .value=${true}
                           @click=${this._handleDeviceEditBoolValueClick}
                         >
@@ -1210,6 +1215,12 @@ function getDwainsHass() {
 	            </div>
 	            `;
 	          } else {
+	            cards.sort(function (x, y) {
+              let a = x.grouped_sort_order,
+                  b = y.grouped_sort_order;
+              return a == b ? 0 : a > b ? 1 : -1;
+            });
+
 	            let group = cards.reduce((r, a) => {
               //console.log("a", a);
               //console.log('r', r);
@@ -1237,12 +1248,6 @@ function getDwainsHass() {
             //  });
 
 
-	            cards.sort(function (x, y) {
-              let a = x.grouped_sort_order,
-                  b = y.grouped_sort_order;
-              return a == b ? 0 : a > b ? 1 : -1;
-            });
-
             return html`
             <div>
             ${sortedGroup.map((key) =>
@@ -1267,7 +1272,7 @@ function getDwainsHass() {
           >
 	            <div>
 	              <span class="hidden">${translateEngine(this._hass, 'device.'+data.domain)}<br></span>
-	              <dd-lazy-card .card=${data.card}></dd-lazy-card>
+	              <dd-lazy-card .card=${data.card} .eager=${true}></dd-lazy-card>
 	            </div>
             ${this.deviceViewEditMode ? html`
             <ha-card>
@@ -1392,7 +1397,7 @@ function getDwainsHass() {
           return html`
 	          <div class="col-span-${data.colSpan} row-span-${data.rowSpan} lg-col-span-${data.colSpanLg} lg-row-span-${data.rowSpanLg} xl-col-span-${data.colSpanXl} xl-row-span-${data.rowSpanXl} relative">
 	            <div>
-	              <dd-lazy-card .card=${data.card}></dd-lazy-card>
+	              <dd-lazy-card .card=${data.card} .eager=${true}></dd-lazy-card>
 	            </div>
             ${this.deviceViewEditMode ? html`
             <ha-card>
@@ -1622,7 +1627,7 @@ function getDwainsHass() {
             return html``;
           } else {
             return html`
-                <div class="flex flex-wrap">
+                <div class="flex flex-wrap dd-dashboard-style-refresh">
                   <div class="w-full ${this.configuration['homepage_header']['v2_mode'] ? "" : "lg-w-1-2 xl-w-1-3"} ${window.location.hash ? (this.configuration['homepage_header']['v2_mode'] ? "hidden" : "hidden lg-block") : ""} p-4">
                     <div id="devices">
                       <div class="flex justify-between mb-2">
@@ -1709,19 +1714,8 @@ function getDwainsHass() {
           }
         }
 
-        static get styles() {
-          return css`
-            .back-button {
-              margin-right: 1rem;
-              margin-bottom: 3.4rem;
-              display: inline-block;
-            }
-            .back-button .button {
-              background-color: var(--secondary-background-color);
-              padding: 0.75rem;
-              border-radius: 9999px;
-              margin-bottom: env(safe-area-inset-bottom);
-            }
+      static get styles() {
+        return [css`
             .card-actions {
               text-align: right;
             }
@@ -2108,7 +2102,7 @@ function getDwainsHass() {
                 grid-template-columns: repeat(5, minmax(0, 1fr))
               }
           }
-          `
+          `, subtleBackButtonStyles(css), subtleDevicesPageStyles(css)]
         }
 
 

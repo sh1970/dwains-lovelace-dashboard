@@ -21,7 +21,7 @@ Promise.race(bases).then(async () => {
   };
 
 
-  const cardHelpers = await window.loadCardHelpers();
+  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
 
   const createThing = async (tag, config) => {
     if (cardHelpers) {

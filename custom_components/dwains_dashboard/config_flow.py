@@ -1,4 +1,5 @@
 import logging
+import json
 import os
 
 import voluptuous as vol
@@ -11,6 +12,10 @@ try:
     from homeassistant.components.sensor import SensorDeviceClass
 except ImportError:  # pragma: no cover - Home Assistant provides this at runtime
     SensorDeviceClass = None
+try:
+    from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+except ImportError:  # pragma: no cover - Home Assistant provides this at runtime
+    BinarySensorDeviceClass = None
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,62 +33,19 @@ SETTINGS_BOOLS = (
     "disable_sensor_graph",
     "invert_cover",
     "hide_unavailable_entities",
-    "home_redirect_enabled",
 )
 SETTINGS_FILE = "dwains-dashboard/configs/settings.yaml"
 DEFAULT_AREA_SENSOR_DEVICE_CLASSES = ["temperature", "humidity"]
-SENSOR_DEVICE_CLASS_LABELS = {
-    "apparent_power": "Scheinleistung",
-    "aqi": "Luftqualitätsindex",
-    "atmospheric_pressure": "Luftdruck",
-    "battery": "Batterie",
-    "carbon_dioxide": "CO₂",
-    "carbon_monoxide": "Kohlenmonoxid",
-    "current": "Stromstärke",
-    "data_rate": "Datenrate",
-    "data_size": "Datenmenge",
-    "date": "Datum",
-    "distance": "Entfernung",
-    "duration": "Dauer",
-    "energy": "Energie",
-    "energy_storage": "Energiespeicher",
-    "enum": "Auswahlwert",
-    "frequency": "Frequenz",
-    "gas": "Gas",
-    "humidity": "Luftfeuchtigkeit",
-    "illuminance": "Beleuchtungsstärke",
-    "irradiance": "Bestrahlungsstärke",
-    "moisture": "Feuchtigkeit",
-    "monetary": "Geldwert",
-    "nitrogen_dioxide": "Stickstoffdioxid",
-    "nitrogen_monoxide": "Stickstoffmonoxid",
-    "nitrous_oxide": "Distickstoffmonoxid",
-    "ozone": "Ozon",
-    "pm1": "Feinstaub PM1",
-    "pm10": "Feinstaub PM10",
-    "pm25": "Feinstaub PM2.5",
-    "power": "Leistung",
-    "power_factor": "Leistungsfaktor",
-    "precipitation": "Niederschlag",
-    "precipitation_intensity": "Niederschlagsintensität",
-    "pressure": "Druck",
-    "reactive_power": "Blindleistung",
-    "signal_strength": "Signalstärke",
-    "sound_pressure": "Schalldruck",
-    "speed": "Geschwindigkeit",
-    "sulphur_dioxide": "Schwefeldioxid",
-    "temperature": "Temperatur",
-    "timestamp": "Zeitstempel",
-    "volatile_organic_compounds": "Flüchtige organische Verbindungen",
-    "volatile_organic_compounds_parts": "Flüchtige organische Verbindungen (Anteile)",
-    "voltage": "Spannung",
-    "volume": "Volumen",
-    "volume_flow_rate": "Volumenstrom",
-    "volume_storage": "Volumenspeicher",
-    "water": "Wasser",
-    "weight": "Gewicht",
-    "wind_speed": "Windgeschwindigkeit",
-}
+DEFAULT_AREA_BINARY_SENSOR_DEVICE_CLASSES = []
+AREA_VIEW_GROUPING_MODE_CLIENT = "client"
+AREA_VIEW_GROUPING_MODE_ENABLED = "enabled"
+AREA_VIEW_GROUPING_MODE_DISABLED = "disabled"
+AREA_VIEW_GROUPING_MODES = (
+    AREA_VIEW_GROUPING_MODE_CLIENT,
+    AREA_VIEW_GROUPING_MODE_ENABLED,
+    AREA_VIEW_GROUPING_MODE_DISABLED,
+)
+_TRANSLATION_CACHE = {}
 FALLBACK_SENSOR_DEVICE_CLASSES = [
     "apparent_power",
     "aqi",
@@ -136,6 +98,36 @@ FALLBACK_SENSOR_DEVICE_CLASSES = [
     "weight",
     "wind_speed",
 ]
+FALLBACK_BINARY_SENSOR_DEVICE_CLASSES = [
+    "battery",
+    "battery_charging",
+    "carbon_monoxide",
+    "cold",
+    "connectivity",
+    "door",
+    "garage_door",
+    "gas",
+    "heat",
+    "light",
+    "lock",
+    "moisture",
+    "motion",
+    "moving",
+    "occupancy",
+    "opening",
+    "plug",
+    "power",
+    "presence",
+    "problem",
+    "running",
+    "safety",
+    "smoke",
+    "sound",
+    "tamper",
+    "update",
+    "vibration",
+    "window",
+]
 
 
 def _read_settings(path):
@@ -154,6 +146,56 @@ def _write_settings(path, data):
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
 
+def _nested_value(data, path):
+    value = data
+    for part in path.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    return value
+
+
+def _translation_language_codes(hass):
+    lang = getattr(getattr(hass, "config", None), "language", None) or "en"
+    base_lang = lang.split("-")[0]
+    codes = [lang, base_lang, "en"]
+    return list(dict.fromkeys(codes))
+
+
+def _load_translation_data(language_codes):
+    translation_dir = os.path.join(os.path.dirname(__file__), "translations")
+    translations = []
+    for language_code in language_codes:
+        translation_path = os.path.join(translation_dir, f"{language_code}.json")
+        if not os.path.exists(translation_path):
+            continue
+        try:
+            with open(translation_path, "r", encoding="utf-8") as f:
+                translation_data = json.load(f)
+        except Exception:
+            continue
+        if isinstance(translation_data, dict):
+            translations.append(translation_data)
+    return translations
+
+
+async def _async_translation_data(hass):
+    language_codes = tuple(_translation_language_codes(hass))
+    if language_codes not in _TRANSLATION_CACHE:
+        _TRANSLATION_CACHE[language_codes] = await hass.async_add_executor_job(
+            _load_translation_data, language_codes
+        )
+    return _TRANSLATION_CACHE[language_codes]
+
+
+def _translation(translations, path, fallback):
+    for translation_data in translations:
+        value = _nested_value(translation_data, path)
+        if isinstance(value, str):
+            return value
+    return fallback
+
+
 def _sensor_device_classes_from_input(value):
     if value is None:
         return list(DEFAULT_AREA_SENSOR_DEVICE_CLASSES)
@@ -170,7 +212,33 @@ def _sensor_device_classes_to_input(settings):
     return settings.get("area_sensor_device_classes") or []
 
 
-def _sensor_device_class_options():
+def _binary_sensor_device_classes_from_input(value):
+    if value is None:
+        return list(DEFAULT_AREA_BINARY_SENSOR_DEVICE_CLASSES)
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
+def _binary_sensor_device_classes_to_input(settings):
+    if "area_binary_sensor_device_classes" not in settings:
+        return list(DEFAULT_AREA_BINARY_SENSOR_DEVICE_CLASSES)
+    return settings.get("area_binary_sensor_device_classes") or []
+
+
+def _area_binary_sensor_entities_from_input(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
+def _sensor_device_class_options(translations):
     values = []
     if SensorDeviceClass is not None:
         values = [device_class.value for device_class in SensorDeviceClass]
@@ -180,12 +248,66 @@ def _sensor_device_class_options():
     return [
         {
             "value": device_class,
-            "label": SENSOR_DEVICE_CLASS_LABELS.get(
-                device_class,
+            "label": _translation(
+                translations,
+                f"selector.area_sensor_device_class.options.{device_class}",
                 device_class.replace("_", " ").title(),
             ),
         }
         for device_class in values
+    ]
+
+
+def _binary_sensor_device_class_options(translations):
+    values = []
+    if BinarySensorDeviceClass is not None:
+        values = [device_class.value for device_class in BinarySensorDeviceClass]
+    for device_class in FALLBACK_BINARY_SENSOR_DEVICE_CLASSES:
+        if device_class not in values:
+            values.append(device_class)
+    return [
+        {
+            "value": device_class,
+            "label": _translation(
+                translations,
+                f"selector.area_binary_sensor_device_class.options.{device_class}",
+                device_class.replace("_", " ").title(),
+            ),
+        }
+        for device_class in values
+    ]
+
+
+def _area_view_grouping_mode(value):
+    return value if value in AREA_VIEW_GROUPING_MODES else AREA_VIEW_GROUPING_MODE_CLIENT
+
+
+def _area_view_grouping_mode_options(translations):
+    return [
+        {
+            "value": AREA_VIEW_GROUPING_MODE_CLIENT,
+            "label": _translation(
+                translations,
+                "selector.area_grouping_mode.options.client",
+                AREA_VIEW_GROUPING_MODE_CLIENT,
+            ),
+        },
+        {
+            "value": AREA_VIEW_GROUPING_MODE_ENABLED,
+            "label": _translation(
+                translations,
+                "selector.area_grouping_mode.options.enabled",
+                AREA_VIEW_GROUPING_MODE_ENABLED,
+            ),
+        },
+        {
+            "value": AREA_VIEW_GROUPING_MODE_DISABLED,
+            "label": _translation(
+                translations,
+                "selector.area_grouping_mode.options.disabled",
+                AREA_VIEW_GROUPING_MODE_DISABLED,
+            ),
+        },
     ]
 
 
@@ -218,12 +340,21 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             header["area_sensor_device_classes"] = _sensor_device_classes_from_input(
                 user_input.get("area_sensor_device_classes", ", ".join(DEFAULT_AREA_SENSOR_DEVICE_CLASSES))
             )
-            target = (user_input.get("home_redirect_target", "/dwains-dashboard/home") or "/dwains-dashboard/home").strip()
-            if not target.startswith("/"):
-                target = f"/{target}"
-            header["home_redirect_target"] = target
+            header["area_binary_sensor_device_classes"] = _binary_sensor_device_classes_from_input(
+                user_input.get("area_binary_sensor_device_classes", DEFAULT_AREA_BINARY_SENSOR_DEVICE_CLASSES)
+            )
+            header["area_binary_sensor_entities"] = _area_binary_sensor_entities_from_input(
+                user_input.get("area_binary_sensor_entities", [])
+            )
+            header["area_view_grouping_mode"] = _area_view_grouping_mode(
+                user_input.get("area_view_grouping_mode", AREA_VIEW_GROUPING_MODE_CLIENT)
+            )
+            header["area_floor_grouping_mode"] = _area_view_grouping_mode(
+                user_input.get("area_floor_grouping_mode", AREA_VIEW_GROUPING_MODE_CLIENT)
+            )
             await self.hass.async_add_executor_job(_write_settings, path, header)
             self.hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
+            self.hass.bus.async_fire("dwains_dashboard_navigation_card_reload")
 
             # Sidebar title/icon live in the entry options.
             return self.async_create_entry(
@@ -236,6 +367,7 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
 
         cur = await self.hass.async_add_executor_job(_read_settings, path)
         opts = self.config_entry.options
+        translations = await _async_translation_data(self.hass)
 
         def entity_default(key):
             val = cur.get(key)
@@ -251,12 +383,32 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             vol.Optional("disable_sensor_graph", default=bool(cur.get("disable_sensor_graph", False))): selector.BooleanSelector(),
             vol.Optional("invert_cover", default=bool(cur.get("invert_cover", False))): selector.BooleanSelector(),
             vol.Optional("hide_unavailable_entities", default=bool(cur.get("hide_unavailable_entities", False))): selector.BooleanSelector(),
-            vol.Optional("home_redirect_enabled", default=bool(cur.get("home_redirect_enabled", False))): selector.BooleanSelector(),
-            vol.Optional("home_redirect_target", default=(cur.get("home_redirect_target", "/dwains-dashboard/home") or "/dwains-dashboard/home")): str,
             vol.Optional("area_sensor_device_classes", default=_sensor_device_classes_to_input(cur)): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=_sensor_device_class_options(),
+                    options=_sensor_device_class_options(translations),
                     multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional("area_binary_sensor_device_classes", default=_binary_sensor_device_classes_to_input(cur)): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=_binary_sensor_device_class_options(translations),
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional("area_binary_sensor_entities", default=cur.get("area_binary_sensor_entities") or []): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor", multiple=True)
+            ),
+            vol.Optional("area_view_grouping_mode", default=_area_view_grouping_mode(cur.get("area_view_grouping_mode"))): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=_area_view_grouping_mode_options(translations),
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional("area_floor_grouping_mode", default=_area_view_grouping_mode(cur.get("area_floor_grouping_mode"))): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=_area_view_grouping_mode_options(translations),
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),

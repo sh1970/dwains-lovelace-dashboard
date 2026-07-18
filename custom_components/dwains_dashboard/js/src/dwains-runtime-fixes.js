@@ -59,6 +59,13 @@ import { createCardElementSafe } from './helpers';
   // at once. Once mounted it stays mounted (pairs with sticky areas: no re-fetch). ---
   if (window.customElements && !customElements.get('dd-lazy-card')) {
     class DDLazyCard extends HTMLElement {
+      set eager(value) {
+        this.__eager = !!value;
+        if (this.__eager && this.isConnected) this._mount();
+      }
+      get eager() {
+        return !!this.__eager;
+      }
       set card(c) {
         if (this.__c === c) return;
         this.__c = c;
@@ -78,6 +85,10 @@ import { createCardElementSafe } from './helpers';
       connectedCallback() {
         if (this.__mounted) return;
         this.style.display = 'block';
+        if (this.__eager || this.hasAttribute('eager')) {
+          this._mount();
+          return;
+        }
         if (!this.style.minHeight) this.style.minHeight = '48px';
         if (!this.__io && 'IntersectionObserver' in window) {
           this.__io = new IntersectionObserver((entries) => {
@@ -113,7 +124,7 @@ import { createCardElementSafe } from './helpers';
   // Robust hass getter to avoid a.mo() race
   window.__dd_get_hass = function() {
     try {
-      return (function() {
+      const h = (function() {
           var el = document.querySelector('home-assistant');
           return el && el.hass ? el.hass : undefined;
         })() ||
@@ -127,96 +138,110 @@ import { createCardElementSafe } from './helpers';
         })() ||
         window.hass ||
         undefined;
+      if (h && window.__dd_patch_hass_call_ws) window.__dd_patch_hass_call_ws(h);
+      return h;
     } catch (_) {
       return undefined;
     }
   };
 
-  // Configurable fallback redirect for HA SPA route jumps (/home* -> custom target)
-  (() => {
-    if (window.__dd_home_redirect_installed) return;
-    window.__dd_home_redirect_installed = true;
-
-    const KEY_ENABLED = "dwains_dashboard_home_redirect_enabled";
-    const KEY_TARGET = "dwains_dashboard_home_redirect_target";
-    const DEFAULT_TARGET = "/dwains-dashboard/home";
-
-    const normalizeTarget = (v) => {
-      if (typeof v !== "string") return DEFAULT_TARGET;
-      const t = v.trim();
-      if (!t) return DEFAULT_TARGET;
-      return t.startsWith("/") ? t : `/${t}`;
-    };
-
-    window.__dd_get_home_redirect_cfg = function() {
-      const cfg = window.__dd_home_redirect_cfg || {};
-      let enabled = cfg.enabled;
-      if (typeof enabled !== "boolean") {
-        try { enabled = localStorage.getItem(KEY_ENABLED) === "true"; } catch (_) { enabled = false; }
-      }
-      let target = cfg.target;
-      if (typeof target !== "string" || !target.trim()) {
-        try { target = localStorage.getItem(KEY_TARGET) || DEFAULT_TARGET; } catch (_) { target = DEFAULT_TARGET; }
-      }
-      return { enabled: !!enabled, target: normalizeTarget(target) };
-    };
-
-    const shouldRedirectPath = (p) =>
-      p === "/" || p === "/home" || p === "/home/" || p.startsWith("/home/overview");
-
-    const fix = () => {
-      const cfg = window.__dd_get_home_redirect_cfg ? window.__dd_get_home_redirect_cfg() : { enabled: false, target: DEFAULT_TARGET };
-      if (!cfg.enabled) return;
-      const p = window.location.pathname || "";
-      const t = normalizeTarget(cfg.target);
-      if (!shouldRedirectPath(p)) return;
-      if (p === t || p === `${t}/`) return;
-      history.replaceState(history.state || null, "", t + (window.location.hash || ""));
-      setTimeout(() => {
-        try { window.dispatchEvent(new Event("location-changed", { bubbles: true, composed: true })); } catch (_) {}
-      }, 0);
-    };
-
-    window.__dd_refresh_home_redirect_cfg = async function() {
+  // Deduplicate expensive read-only websocket calls during dashboard startup.
+  // HA can connect/mount DD3 cards more than once while Lovelace is still
+  // settling. Without this guard, homepage/navigation/devices cards may all ask
+  // for the same registries/configuration in parallel, which can delay
+  // "Dwains Dashboard Started" by several seconds on larger installs.
+  if (!window.__dd_patch_hass_call_ws) {
+    window.__dd_ws_read_cache = window.__dd_ws_read_cache || new Map();
+    window.__dd_ws_read_inflight = window.__dd_ws_read_inflight || new Map();
+    window.__dd_clear_ws_read_cache = function() {
       try {
-        const getHass = window.__dd_get_hass || (() => undefined);
-        let hass = getHass();
-        for (let i = 0; !hass && i < 30; i++) {
-          await new Promise((r) => setTimeout(r, 200));
-          hass = getHass();
-        }
-        if (!hass || typeof hass.callWS !== "function") return;
-        const cfg = await hass.callWS({ type: "dwains_dashboard/configuration/get" });
-        const hh = cfg && cfg.homepage_header ? cfg.homepage_header : {};
-        const enabled = hh.home_redirect_enabled ?? hh.homeRedirectEnabled;
-        const target = hh.home_redirect_target ?? hh.homeRedirectTarget;
-        window.__dd_home_redirect_cfg = {
-          enabled: !!enabled,
-          target: normalizeTarget(typeof target === "string" ? target : DEFAULT_TARGET)
+        window.__dd_ws_read_cache.clear();
+        window.__dd_ws_read_inflight.clear();
+      } catch (_) {}
+    };
+    const READ_CACHE_TTL = 3000;
+    const READ_TYPES = new Set([
+      'dwains_dashboard/configuration/get',
+      'config/area_registry/list',
+      'config/device_registry/list',
+      'config/entity_registry/list',
+      'config/floor_registry/list',
+    ]);
+    const keyForMessage = function(msg) {
+      if (!msg || !READ_TYPES.has(msg.type)) return undefined;
+      try {
+        return JSON.stringify(msg);
+      } catch (_) {
+        return msg.type;
+      }
+    };
+    window.__dd_patch_hass_call_ws = function(h) {
+      try {
+        if (!h || typeof h.callWS !== 'function' || h.__dd_call_ws_patched) return h;
+        const originalCallWS = h.callWS.bind(h);
+        h.callWS = function(msg) {
+          const key = keyForMessage(msg);
+          if (!key) {
+            if (msg && typeof msg.type === 'string' && msg.type.startsWith('dwains_dashboard/')) {
+              window.__dd_clear_ws_read_cache();
+            }
+            return originalCallWS(msg);
+          }
+          const now = Date.now();
+          const cached = window.__dd_ws_read_cache.get(key);
+          if (cached && now - cached.ts < READ_CACHE_TTL) return Promise.resolve(cached.value);
+          const pending = window.__dd_ws_read_inflight.get(key);
+          if (pending) return pending;
+          const promise = originalCallWS(msg).then((result) => {
+            window.__dd_ws_read_cache.set(key, { ts: Date.now(), value: result });
+            return result;
+          }).finally(() => {
+            window.__dd_ws_read_inflight.delete(key);
+          });
+          window.__dd_ws_read_inflight.set(key, promise);
+          return promise;
         };
-        fix();
+        h.__dd_call_ws_patched = true;
       } catch (_) {}
+      return h;
     };
+  }
+  try {
+    window.__dd_patch_hass_call_ws(window.__dd_get_hass && window.__dd_get_hass());
+  } catch (_) {}
 
-    fix();
-    window.addEventListener("location-changed", fix);
-    window.addEventListener("popstate", fix);
-    setTimeout(fix, 1200);
-    try { window.__dd_refresh_home_redirect_cfg && window.__dd_refresh_home_redirect_cfg(); } catch (_) {}
-  })();
-
-  // Reliable loader for card helpers with retries/backoff
+  // Reliable shared loader for card helpers with retries/backoff.
+  // Several editor dialogs need the same HA helper object. Cache the resolved
+  // helpers and share one pending promise instead of awaiting loadCardHelpers()
+  // repeatedly while opening/editing cards.
   if (!window.__dd_wait_card_helpers) window.__dd_wait_card_helpers = async function(maxTries = 20) {
-    for (let i = 0; i < maxTries; i++) {
-      try {
-        if (window.loadCardHelpers) {
-          const h = await window.loadCardHelpers();
-          if (h && typeof h.createCardElement === 'function') return h;
-        }
-      } catch (_) {}
-      await new Promise(r => setTimeout(r, i < 5 ? 100 : 300));
+    if (window.__dd_card_helpers && typeof window.__dd_card_helpers.createCardElement === 'function') {
+      return window.__dd_card_helpers;
     }
-    throw new Error('Card helpers not loaded');
+    if (window.__dd_card_helpers_promise) {
+      return window.__dd_card_helpers_promise;
+    }
+
+    window.__dd_card_helpers_promise = (async () => {
+      for (let i = 0; i < maxTries; i++) {
+        try {
+          if (window.loadCardHelpers) {
+            const h = await window.loadCardHelpers();
+            if (h && typeof h.createCardElement === 'function') {
+              window.__dd_card_helpers = h;
+              return h;
+            }
+          }
+        } catch (_) {}
+        await new Promise(r => setTimeout(r, i < 5 ? 100 : 300));
+      }
+      throw new Error('Card helpers not loaded');
+    })().catch((err) => {
+      window.__dd_card_helpers_promise = undefined;
+      throw err;
+    });
+
+    return window.__dd_card_helpers_promise;
   };
 
   // Close parent ha-dropdown (HA 2026 menu behavior)
