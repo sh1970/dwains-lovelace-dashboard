@@ -125,12 +125,22 @@ Promise.race(bases2).then(async () => {
 
         }
         _handleRemoveMorePageClicked(ev){
+          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          ev.stopPropagation();
+          const morePage = ev.currentTarget.more_page;
           this._hass.connection.sendMessagePromise({
             type: 'dwains_dashboard/remove_more_page',
-            foldername: ev.currentTarget.more_page,
+            foldername: morePage,
           }).then(
-              (resp) => {
+              async (resp) => {
                   console.log(resp);
+                  if(this.configuration && this.configuration.more_pages && this.configuration.more_pages[morePage]){
+                    const morePages = {...this.configuration.more_pages};
+                    delete morePages[morePage];
+                    this.configuration = {...this.configuration, more_pages: morePages};
+                    this.requestUpdate();
+                  }
+                  await this._reloadCard();
               },
               (err) => {
                   console.error('Message failed!', err);

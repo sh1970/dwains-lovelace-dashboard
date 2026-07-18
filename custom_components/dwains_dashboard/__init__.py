@@ -1517,11 +1517,13 @@ async def ws_handle_edit_more_page(
     #hass.services.call(DOMAIN, "reload")
 
     await reload_configuration(hass)
+    hass.bus.async_fire("dwains_dashboard_more_pages_reload")
 
     connection.send_result(
         msg["id"],
         {
-            "succesfull": "More page saved succesfully"
+            "succesfull": "More page saved succesfully",
+            "foldername": more_page_folder,
         },
     )
 
@@ -1553,6 +1555,7 @@ async def ws_handle_remove_more_page(
     await reload_configuration(hass)
 
     hass.bus.async_fire("dwains_dashboard_reload")
+    hass.bus.async_fire("dwains_dashboard_more_pages_reload")
 
     connection.send_result(
         msg["id"],

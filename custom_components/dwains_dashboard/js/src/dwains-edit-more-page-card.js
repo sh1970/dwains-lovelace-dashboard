@@ -1,5 +1,6 @@
 import { lovelace_view } from "card-tools/src/hass";
 import { fireEvent } from "card-tools/src/event";
+import { navigate } from 'custom-card-helpers';
 import { css, html, LitElement } from 'lit-element';
 import translateEngine from './translate-engine';
 import { closePopup } from "./helpers";
@@ -327,16 +328,8 @@ class DwainsEditMorePageCard extends LitElement {
         (resp) => {
             console.log(resp);
             const ll = lovelace_view();
-            if (ll)
+            if (ll) {
                 fireEvent("config-refresh", {}, ll);
-                let path = window.location.pathname;
-                let nav_path = path.substring(1, path.lastIndexOf('/'));
-
-                //Location check if user is in dwains dashboard
-                if(nav_path == "dwains-dashboard"){
-                setTimeout(function() {
-                    document.location.reload()
-                }, 1000);
             }
             closePopup();
         },
@@ -417,7 +410,11 @@ class DwainsEditMorePageCard extends LitElement {
         (resp) => {
             console.log(resp);
             closePopup();
-            document.location = 'more_page';
+            const ll = lovelace_view();
+            if (ll) {
+                fireEvent("config-refresh", {}, ll);
+            }
+            navigate(window, "/dwains-dashboard/more_page");
         },
         (err) => {
             console.error('Message failed!', err);
