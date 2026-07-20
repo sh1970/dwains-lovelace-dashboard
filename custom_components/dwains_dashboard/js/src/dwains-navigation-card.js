@@ -100,9 +100,13 @@ class DwainsNavigationCard extends LitElement {
       }
 
       set hass(hass) {
+        const connectionChanged = this._hass?.connection !== hass?.connection;
         this._hass = hass;
-        if (this.isLoading) { // Configuratie laden alleen als het nog niet geladen is
-            this.loadConfig();
+        if (connectionChanged) {
+          this._unsubscribe();
+        }
+        if (this.isConnected && (this.isLoading || connectionChanged)) {
+          this.loadConfig(true);
         }
       }
 
@@ -112,38 +116,88 @@ class DwainsNavigationCard extends LitElement {
         this.isLoading = true; // Start met laden aangeven
       }
 
+      connectedCallback() {
+        super.connectedCallback();
+        this.currentPath = document.location.pathname;
+        if (this._hass) {
+          this.loadConfig(!this.configuration);
+        }
+      }
+
       disconnectedCallback() {
         super.disconnectedCallback();
+        this._unsubscribe();
+        this.isLoading = !this.configuration;
+      }
+
+      _unsubscribe() {
         if(this._unsub){
           Promise.resolve(this._unsub()).catch(() => {});
           this._unsub = undefined;
         }
-        this.isLoading = true;
+        this._subscriptionConnection = undefined;
       }
 
+      async loadConfig(force = false) {
+        if (!this._hass || !this._hass.connection) return false;
+        if (this._loadConfigPromise) return this._loadConfigPromise;
+        if (!force && this.configuration && this._subscriptionConnection === this._hass.connection) {
+          this.isLoading = false;
+          return true;
+        }
 
-      async loadConfig() {
-        if (this._hass) {
+        const hass = this._hass;
+        const connection = hass.connection;
+        if (this._subscriptionConnection !== connection) {
+          this._unsubscribe();
+        }
+        this.isLoading = !this.configuration;
+        this._loadConfigPromise = (async () => {
           try {
-            this.configuration = await this._hass.callWS({
+            const configuration = await hass.callWS({
               type: 'dwains_dashboard/configuration/get'
             });
+            if (this._hass?.connection !== connection) return false;
+            this.configuration = configuration;
             this.isLoading = false; // Configuratie is geladen
             this.requestUpdate(); // Vraag een update van de render-functie aan
-            if(!this._unsub){
-              this._unsub = await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_navigation_card_reload");
+            if(!this._unsub && this.isConnected){
+              const unsubscribe = await connection.subscribeEvents(
+                () => this._reloadCard(),
+                "dwains_dashboard_navigation_card_reload"
+              );
+              if (this._hass?.connection === connection && this.isConnected) {
+                this._unsub = unsubscribe;
+                this._subscriptionConnection = connection;
+              } else {
+                Promise.resolve(unsubscribe()).catch(() => {});
+              }
             }
+            this._loadRetries = 0;
+            return true;
           } catch (error) {
             console.error('Error loading configuration:', error);
-            this.isLoading = false;
+            this.isLoading = !this.configuration;
+            if (this.isConnected && (this._loadRetries = (this._loadRetries || 0) + 1) <= 20) {
+              setTimeout(() => this.loadConfig(true), this._loadRetries <= 5 ? 150 : 300);
+            }
+            return false;
           }
-        }
+        })().finally(() => {
+          this._loadConfigPromise = undefined;
+        });
+        return this._loadConfigPromise;
+      }
+
+      async ensureReady() {
+        this.currentPath = document.location.pathname;
+        return this.loadConfig(true);
       }
 
       async _reloadCard(){
         console.log('Reloading navigation card');
 
-        await this.loadConfig();
+        await this.loadConfig(true);
         this.requestUpdate();
       }
 
