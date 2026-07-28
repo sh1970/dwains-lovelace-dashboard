@@ -1,8 +1,7 @@
-import { hass } from "card-tools/src/hass";
-import { moreInfo } from "card-tools/src/more-info";
+import { moreInfo } from "./card-tools-compat";
 import { popUp } from "./dwains-popup";
 import { mdiDotsVertical, mdiCog } from "@mdi/js";
-import { css, html, LitElement } from 'lit-element';
+import { css, html, LitElement } from 'lit';
 import Cookies from 'js-cookie'
 import {
   WEATHER_ICONS,
@@ -18,74 +17,54 @@ import {
   DOMAIN_STATE_ICONS,
   ALARM_ICONS,
  } from './variables'
-import { computeDomain} from 'custom-card-helpers';
+import { computeDomain} from './frontend-helpers';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import translateEngine from './translate-engine';
 import { createCardElementSafe, resolveEntityName } from './helpers';
-import { subtleHomepageStyles } from './styles/dwains-subtle-style';
+import {
+  subtleDetailViewStyles,
+  subtleHomepageStyles,
+} from './styles/dwains-subtle-style';
+const { EventSubscriptionOwner } = require('./event-subscription-owner');
+const {
+  averageEntityStates,
+  countActiveEntities,
+  groupEntityStatesByDomain,
+  isEntityHiddenInArea,
+  localizedClimateState,
+} = require('./entity-aggregation');
+const { TimerOwner } = require('./timer-owner');
+const { PopupOpenScheduler } = require('./popup-open-scheduler');
+const { ReloadableLoadOwner } = require('./reloadable-load-owner');
+const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
+const { websocketReadStore } = require('./websocket-read-store');
+const { loadDashboardRegistrySnapshot } = require('./dashboard-registry-snapshot');
+const { resolveHass } = require('./hass-provider');
+const { loadCardHelpers } = require('./card-helpers-loader');
+const { closeParentDropdown } = require('./dropdown-controller');
+const { defineDwainsElement } = require('./custom-element-registration');
+const { attachDeferredCard } = require('./deferred-card');
+const {
+  createHomepageCardElement,
+  propagateHomepageHass,
+} = require('./homepage-card-runtime');
+const {
+  areaBinarySensorDeviceClasses,
+  areaBinarySensorEntities,
+  areaSensorDeviceClasses,
+  groupingMode,
+  readBooleanCookie,
+  resolveGroupingPreference,
+} = require('./homepage-preferences');
+const {
+  collectAreaBinarySensorValues,
+  entityBelongsToArea,
+  summaryTranslationKey,
+} = require('./area-binary-sensors');
 
 function getDwainsHass() {
-  return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
+  return resolveHass();
 }
-
-const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
-  cold: {
-    zero: "area_binary_sensor.summary.cold.zero",
-    one: "area_binary_sensor.summary.cold.one",
-    many: "area_binary_sensor.summary.cold.many",
-  },
-  door: {
-    zero: "area_binary_sensor.summary.door.zero",
-    one: "area_binary_sensor.summary.door.one",
-    many: "area_binary_sensor.summary.door.many",
-  },
-  garage_door: {
-    zero: "area_binary_sensor.summary.garage_door.zero",
-    one: "area_binary_sensor.summary.garage_door.one",
-    many: "area_binary_sensor.summary.garage_door.many",
-  },
-  lock: {
-    zero: "area_binary_sensor.summary.lock.zero",
-    one: "area_binary_sensor.summary.lock.one",
-    many: "area_binary_sensor.summary.lock.many",
-  },
-  moisture: {
-    zero: "area_binary_sensor.summary.moisture.zero",
-    one: "area_binary_sensor.summary.moisture.one",
-    many: "area_binary_sensor.summary.moisture.many",
-  },
-  motion: {
-    zero: "area_binary_sensor.summary.motion.zero",
-    one: "area_binary_sensor.summary.motion.one",
-    many: "area_binary_sensor.summary.motion.many",
-  },
-  safety: {
-    zero: "area_binary_sensor.summary.safety.zero",
-    one: "area_binary_sensor.summary.safety.one",
-    many: "area_binary_sensor.summary.safety.many",
-  },
-  smoke: {
-    zero: "area_binary_sensor.summary.smoke.zero",
-    one: "area_binary_sensor.summary.smoke.one",
-    many: "area_binary_sensor.summary.smoke.many",
-  },
-  sound: {
-    zero: "area_binary_sensor.summary.sound.zero",
-    one: "area_binary_sensor.summary.sound.one",
-    many: "area_binary_sensor.summary.sound.many",
-  },
-  vibration: {
-    zero: "area_binary_sensor.summary.vibration.zero",
-    one: "area_binary_sensor.summary.vibration.one",
-    many: "area_binary_sensor.summary.vibration.many",
-  },
-  window: {
-    zero: "area_binary_sensor.summary.window.zero",
-    one: "area_binary_sensor.summary.window.one",
-    many: "area_binary_sensor.summary.window.many",
-  },
-};
-
 
 	  class HomepageCard extends LitElement {
     static get properties() {
@@ -101,16 +80,18 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
       };
     }
 
-	    async loadHelpers() {
-	      if (window.__dd_wait_card_helpers) {
-	        return await window.__dd_wait_card_helpers();
-	      }
-	      if (typeof window.loadCardHelpers === 'function') {
-	        return await window.loadCardHelpers();
-	      } else {
-        console.warn('loadCardHelpers is not available, ensure you are running a compatible version of Home Assistant');
-      }
+    constructor() {
+      super();
+      this._subscriptions = new EventSubscriptionOwner();
+      this._timers = new TimerOwner();
+      this._popupOpens = new PopupOpenScheduler(this._timers);
+      this._loads = new ReloadableLoadOwner((context) => this._loadConfiguration(context));
+      this._startedHass = undefined;
     }
+
+	    async loadHelpers() {
+	      return loadCardHelpers();
+	    }
 
     _entityDisplayName(entityId, entityRegistryEntry) {
       const entityEntry = entityRegistryEntry || this.entitiesById?.get(entityId);
@@ -130,13 +111,22 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
      * @param {any} hass
      */
     set hass(hass) {
+      const connectionChanged = hasHassConnectionChanged(this._hass, hass);
+      this._hass = hass;
+      propagateHomepageHass(this, hass);
       if(this.startedUp){
         this._update_hass(hass);
       }
+      if (connectionChanged && this.isConnected) {
+        this._subscriptions.disconnect();
+        this._subscriptions.connect();
+      }
+      void this._startIfReady(connectionChanged);
     }
 
 	    _update_hass(hass){
 	      this._hass = hass;
+	      propagateHomepageHass(this, hass);
 
 	      //console.log('set hass runned');
 	      if(this.data == null || this.data.length === 0) return;
@@ -163,12 +153,25 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 	      }
 	      if(this.badgesCard) this.badgesCard.hass = hass;
 
-	      if(this.timeout) return;
+	      if(this.timeout) {
+	        this._pendingHassUpdate = true;
+	        return;
+	      }
 	      this.timeout = true;
-	      if(this.areaEditMode || this.favoriteEditMode || this.areaViewEditMode){
-	        window.setTimeout(() => {this.timeout = false;}, 1000);
-	      } else {
-	        window.setTimeout(() => {this.timeout = false;}, 100);
+	      this._pendingHassUpdate = false;
+	      const delay = this.areaEditMode || this.favoriteEditMode || this.areaViewEditMode
+	        ? 1000
+	        : 100;
+	      const timer = this._timers.schedule('hass-update-throttle', () => {
+	        this.timeout = false;
+	        if(this._pendingHassUpdate){
+	          this._pendingHassUpdate = false;
+	          this.requestUpdate();
+	        }
+	      }, delay);
+	      if(timer === undefined){
+	        this.timeout = false;
+	        this._pendingHassUpdate = false;
 	      }
 	      this.requestUpdate();
 
@@ -177,10 +180,9 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     async setConfig(config) {
       this.startedUp = false;
       this.timeout = false;
+      this._pendingHassUpdate = false;
 
-	      this._hass = getDwainsHass();
-
-      this.cardHelpers = await this.loadHelpers();
+	      if (!this._hass) this._hass = getDwainsHass();
 
       this.selectedArea = window.location.hash.substring(1);
       this.areaEditMode = false;
@@ -190,23 +192,26 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
       this.areaDisplayGrouped = this._areaDisplayGroupedFromClient();
 
       this._config = config;
+
+      this._cardHelpersReady = this.loadHelpers();
+      this.cardHelpers = await this._cardHelpersReady;
+      await this._startIfReady();
     }
 
     _areaViewDisplayGroupedFromClient(){
-      return Cookies.get('dwains_dashboard_areaViewDisplayGrouped') ? (Cookies.get('dwains_dashboard_areaViewDisplayGrouped') == "false" ? false : true) : false;
+      return readBooleanCookie(Cookies, 'dwains_dashboard_areaViewDisplayGrouped');
     }
 
     _areaViewGroupingMode(){
-      const header = this.configuration && this.configuration['homepage_header'] ? this.configuration['homepage_header'] : {};
-      const mode = header['area_view_grouping_mode'] || 'client';
-      return ['client', 'enabled', 'disabled'].includes(mode) ? mode : 'client';
+      return groupingMode(this.configuration, 'area_view_grouping_mode');
     }
 
     _areaViewDisplayGroupedFromPreference(){
-      const mode = this._areaViewGroupingMode();
-      if(mode == 'enabled') return true;
-      if(mode == 'disabled') return false;
-      return this._areaViewDisplayGroupedFromClient();
+      return resolveGroupingPreference(
+        this.configuration,
+        'area_view_grouping_mode',
+        this._areaViewDisplayGroupedFromClient(),
+      );
     }
 
     _applyAreaViewGroupingPreference(){
@@ -214,20 +219,19 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _areaDisplayGroupedFromClient(){
-      return Cookies.get('dwains_dashboard_areaDisplayGrouped') ? (Cookies.get('dwains_dashboard_areaDisplayGrouped') == "false" ? false : true) : false;
+      return readBooleanCookie(Cookies, 'dwains_dashboard_areaDisplayGrouped');
     }
 
     _areaFloorGroupingMode(){
-      const header = this.configuration && this.configuration['homepage_header'] ? this.configuration['homepage_header'] : {};
-      const mode = header['area_floor_grouping_mode'] || 'client';
-      return ['client', 'enabled', 'disabled'].includes(mode) ? mode : 'client';
+      return groupingMode(this.configuration, 'area_floor_grouping_mode');
     }
 
     _areaDisplayGroupedFromPreference(){
-      const mode = this._areaFloorGroupingMode();
-      if(mode == 'enabled') return true;
-      if(mode == 'disabled') return false;
-      return this._areaDisplayGroupedFromClient();
+      return resolveGroupingPreference(
+        this.configuration,
+        'area_floor_grouping_mode',
+        this._areaDisplayGroupedFromClient(),
+      );
     }
 
     _applyAreaDisplayGroupingPreference(){
@@ -236,23 +240,41 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 
 	    async connectedCallback(){
 	      super.connectedCallback();
+	      this._subscriptions.connect();
+	      this._timers.connect();
 
-	      await this._loadData(); //Load areas
-
-	      if(!this._unsub){
-	        this._unsub = await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_homepage_card_reload");
-	      }
-	      this._scheduleIconRepoke();
+	      await this._startIfReady();
 	    }
+
+    async _startIfReady(reload = false) {
+      const connection = hassConnectionIdentity(this._hass);
+      if (!this.isConnected || !this._hass || !this._config || this._startedHass === connection) return;
+      const hass = this._hass;
+      this._startedHass = connection;
+      try {
+        if(this._cardHelpersReady){
+          this.cardHelpers = await this._cardHelpersReady;
+        }
+        if (reload) await this._reloadCard();
+        else await this._loadData();
+        if (this.isConnected && hassConnectionIdentity(this._hass) === connection && this._startedHass === connection) {
+          await this._subscribeReload();
+          this._scheduleIconRepoke();
+        }
+      } catch (error) {
+        if (this._startedHass === connection) this._startedHass = undefined;
+        console.error('Error starting homepage card:', error);
+      }
+    }
 
 	    disconnectedCallback(){
 	      super.disconnectedCallback();
-	      if(this._unsub){
-	        Promise.resolve(this._unsub()).catch(() => {});
-	        this._unsub = undefined;
-	      }
-	      (this.__iconRepokeTimers || []).forEach((timer) => clearTimeout(timer));
-	      this.__iconRepokeTimers = [];
+	      this._subscriptions.disconnect();
+	      this._timers.disconnect();
+	      this._startedHass = undefined;
+	      this._loads.invalidate();
+	      this.timeout = false;
+	      this._pendingHassUpdate = false;
 	      this.__iconRepokeScheduled = false;
 	      if(this.__masonryRO){
 	        this.__masonryRO.disconnect();
@@ -262,6 +284,20 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 	        cancelAnimationFrame(this.__masonryRaf);
 	        this.__masonryRaf = 0;
 	      }
+	    }
+
+	    _subscribeReload(){
+	      return this._subscriptions.subscribeEvent(
+	        'homepage',
+	        this._hass,
+	        "dwains_dashboard_homepage_card_reload",
+	        () => {
+	          websocketReadStore.invalidate(this._hass);
+	          this._reloadCard().catch((error) => {
+	            console.error('Error reloading homepage card:', error);
+	          });
+	        },
+	      );
 	    }
 
 	    updated(){
@@ -283,20 +319,24 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 	          iconEl.icon = "";
 	          iconEl.icon = icon;
 	        });
-	      } catch (_) {}
+	      } catch (error) {
+	        console.error("Failed to repoke homepage icons", error);
+	      }
 	    }
 
 	    _scheduleIconRepoke(){
 	      if(this.__iconRepokeScheduled) return;
 	      this.__iconRepokeScheduled = true;
 	      const delays = [60, 300, 900, 2000, 4000, 8000, 12000];
-	      this.__iconRepokeTimers = delays.map((delay, index) => setTimeout(() => {
+	      const timers = delays.map((delay, index) => this._timers.schedule(`icon-repoke-${index}`, () => {
 	        if(index === delays.length - 1){
 	          this.__iconRepokeScheduled = false;
-	          this.__iconRepokeTimers = [];
 	        }
 	        this._repokeIcons();
 	      }, delay));
+	      if(timers.every((timer) => timer === undefined)) {
+	        this.__iconRepokeScheduled = false;
+	      }
 	    }
 
 	    _layoutMasonry(){
@@ -317,11 +357,15 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 	          Array.from(grid.children).forEach((item) => {
 	            try {
 	              if(this.__masonryRO) this.__masonryRO.observe(item);
-	            } catch (_) {}
+	            } catch (error) {
+	              console.error("Failed to observe a homepage masonry item", error);
+	            }
 	          });
 	        });
 	        this._applyMasonrySpans();
-	      } catch (_) {}
+	      } catch (error) {
+	        console.error("Failed to update homepage masonry observers", error);
+	      }
 	    }
 
 	    _currentMasonryRowSpan(item){
@@ -364,42 +408,29 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 	            });
 	          }
 	        });
-	      } catch (_) {}
+	      } catch (error) {
+	        console.error("Failed to apply homepage masonry spans", error);
+	      }
 	    }
 
     async _reloadCard(){
-      await this._loadData();
+      await this._loads.reload();
       this.requestUpdate();
     }
 
-    async _loadData(){
+    _loadData(){
+      return this._loads.load();
+    }
+
+    async _loadConfiguration({ isCurrent = () => true } = {}){
       this.startedUp = false;
 
-      [
-        this.areas,
-        this.devices,
-        this.entities,
-        this.configuration,
-        this.floors,
-      ] = await Promise.all([
-        this._hass.callWS({
-          type: "config/area_registry/list"
-        }),
-        this._hass.callWS({
-          type: "config/device_registry/list"
-        }),
-        this._hass.callWS({
-          type: "config/entity_registry/list"
-        }),
-        this._hass.callWS({
-          type: 'dwains_dashboard/configuration/get'
-        }),
-        this._hass.callWS({
-          type: "config/floor_registry/list"
-        }).catch(() => []),
-      ]);
-	      this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
-	      this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
+      const snapshot = await loadDashboardRegistrySnapshot(
+        this._hass,
+        { includeFloors: true },
+      );
+      if (!isCurrent()) return;
+      Object.assign(this, snapshot);
 
       this._applyAreaViewGroupingPreference();
       this._applyAreaDisplayGroupingPreference();
@@ -414,13 +445,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
       || this.configuration == null || this.configuration.length === 0
       ){
       } else {
-        //For activating the ha-icon-picker
-        const loader = document.createElement("hui-masonry-view");
-        loader.lovelace = { editMode: true };
-        loader.willUpdate(new Map());
-        //End for the ha-icon-picker
-
-        [this.notificationCard, this.badgesCard] = await Promise.all([
+        const [notificationCard, badgesCard] = await Promise.all([
           this.createCardElement2({
             type: "custom:dwains-notification-card",
             hass: this._hass,
@@ -430,6 +455,9 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
             hass: this._hass,
           }),
         ]);
+        if (!isCurrent()) return;
+        this.notificationCard = notificationCard;
+        this.badgesCard = badgesCard;
 
 
         //Favorites load part
@@ -601,7 +629,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                 colSpanXl = this.configuration['entities'][entity]['col_span_xl'];
               }
 
-	              favoritesEntities.push({
+	              favoritesEntities.push(attachDeferredCard({
                 domain: domain,
                 entity: entity,
                 rowSpan: rowSpan,
@@ -613,12 +641,11 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                 friendlyName: configuredFriendlyName,
                 hideEntity: hideEntity,
                 excludeEntity: excludeEntity,
-	                card: await this.createCardElement2(cardConfig),
                 customCard: customCard,
                 customPopup: customPopup,
                 isFavorite: isFavorite,
                 favorite_sort_order: (this.configuration['entities'][entity] && this.configuration['entities'][entity]['favorite_sort_order'] ? this.configuration['entities'][entity]['favorite_sort_order']: 99),
-              });
+              }, () => this.createCardElement2(cardConfig)));
             }
           }));
 
@@ -634,7 +661,6 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
             //   this.selectedArea = area.area_id;
             // }
 
-            const areaDevices = new Set();
             const areaEntities = new Set();
             const areaCardsByDomain = [];
             const areaEntitiesNoState = [];
@@ -643,22 +669,12 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
             const areaCustomCardsTop = [];
             const areaCustomCardsBottom = [];
 
-            // Find all devices linked to this area
-            for (const device of this.devices) {
-              if (device.area_id === area.area_id) {
-                areaDevices.add(device.id);
-              }
-            }
-
-            // Find all entities directly linked to this area
-            // or linked to a device linked to this area.
-            for (const entity of this.entities) {
-              if (
-                entity.area_id
-                  ? entity.area_id === area.area_id
-                  : areaDevices.has(entity.device_id)
-              ) {
+            for (const entity of this.entitiesByAreaId.get(area.area_id) || []) {
                 if(entity.hidden_by){
+                  continue;
+                }
+                const entityConfig = this.configuration['entities']?.[entity.entity_id];
+                if (isEntityHiddenInArea(entityConfig)) {
                   continue;
                 }
                 const disableEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['disabled'] ? true : false) : false;
@@ -666,7 +682,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                   areaEntitiesDisabled.push(entity.entity_id);
                   continue;
                 }
-                const domain = entity.entity_id.substr(0, entity.entity_id.indexOf("."));
+                const domain = entity.entity_id.slice(0, entity.entity_id.indexOf("."));
                 const stateObj = this._hass.states[entity.entity_id];
 
                 if (stateObj) {
@@ -840,7 +856,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                     }
 
 
-                    areaCardsByDomain.push({
+                    areaCardsByDomain.push(attachDeferredCard({
                       domain: domain,
                       entity: entity.entity_id,
                       rowSpan: rowSpan,
@@ -852,28 +868,25 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                       friendlyName: configuredFriendlyName,
                       hideEntity: hideEntity,
                       excludeEntity: excludeEntity,
-	                      card: this.createCardElement2(cardConfig),
                       customCard: customCard,
                       customPopup: customPopup,
                       isFavorite: isFavorite,
                       sort_order: (this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['sort_order'] ? this.configuration['entities'][entity.entity_id]['sort_order']: 99),
                       grouped_sort_order: (this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['grouped_sort_order'] ? this.configuration['entities'][entity.entity_id]['grouped_sort_order']: 99),
-                    });
+                    }, () => this.createCardElement2(cardConfig)));
 
                     areaEntities.add(entity.entity_id);
                   }
                 } else {
                   areaEntitiesNoState.push(entity.entity_id);
                 }
-              }
             }
 
             //Custom cards
             if(this.configuration.area_cards.length !== 0){
               if(this.configuration.area_cards[area.area_id]){
                 //console.log(Object.entries(this.configuration.area_cards[area.area_id]));
-                await Promise.all(Object.entries(this.configuration.area_cards[area.area_id]).map(async ([k,v]) => {
-                  const card = await this.createCardElement2(v);
+                Object.entries(this.configuration.area_cards[area.area_id]).forEach(([k,v]) => {
                   const rowSpan = v["row_span"] ? v["row_span"] : "1";
                   const colSpan = v["col_span"] ? v["col_span"] : "1";
                   const rowSpanLg = v["row_span_lg"] ? v["row_span_lg"] : "1";
@@ -882,8 +895,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                   const colSpanXl = v["col_span_xl"] ? v["col_span_xl"] : "1";
 
                   if(v["position"] == 'bottom'){
-                    areaCustomCardsBottom.push({
-                      card: card,
+                    areaCustomCardsBottom.push(attachDeferredCard({
                       filename: k,
                       area_id: area.area_id,
                       rowSpan: rowSpan,
@@ -892,10 +904,9 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                       colSpanLg: colSpanLg,
                       rowSpanXl: rowSpanXl,
                       colSpanXl: colSpanXl,
-                    });
+                    }, () => this.createCardElement2(v)));
                   } else {
-                    areaCustomCardsTop.push({
-                      card: card,
+                    areaCustomCardsTop.push(attachDeferredCard({
                       filename: k,
                       area_id: area.area_id,
                       rowSpan: rowSpan,
@@ -904,12 +915,13 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                       colSpanLg: colSpanLg,
                       rowSpanXl: rowSpanXl,
                       colSpanXl: colSpanXl,
-                    });
+                    }, () => this.createCardElement2(v)));
                   }
-                }));
+                });
               }
             }
 
+            const floor = this.floorsById.get(area.floor_id);
             //if(areaCardsByDomain.length != 0){
               data.push({
                 entitiesNoState: areaEntitiesNoState,
@@ -920,8 +932,8 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                 cards: areaCardsByDomain,
                 customCardsTop: areaCustomCardsTop,
                 customCardsBottom: areaCustomCardsBottom,
-	                floor: ((this.floors || []).find((floor) => floor.floor_id === area.floor_id) || {}).name || translateEngine(this._hass, 'area.no_floor'),
-	                floorLevel: ((this.floors || []).find((floor) => floor.floor_id === area.floor_id) || {}).level ?? 9999,
+	                floor: floor?.name || translateEngine(this._hass, 'area.no_floor'),
+	                floorLevel: floor?.level ?? 9999,
                 sort_order: (this.configuration['areas'][area.area_id] && this.configuration['areas'][area.area_id]['sort_order'] ? this.configuration['areas'][area.area_id]['sort_order']: 99),
                 grouped_sort_order: (this.configuration['areas'][area.area_id] && this.configuration['areas'][area.area_id]['grouped_sort_order'] ? this.configuration['areas'][area.area_id]['grouped_sort_order']: 99),
               });
@@ -929,25 +941,18 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
           }
         }
 
+        if (!isCurrent()) return;
         data.sort(function (x, y) {
           let a = x.sort_order,
               b = y.sort_order;
           return a == b ? 0 : a > b ? 1 : -1;
         });
 
+        if (!isCurrent()) return;
 	        //Check if selectedArea is empty (no hash and this is first area to loop throug so set it)
 	        if(this.selectedArea.length === 0){
 	          this.selectedArea = data[0]['area']['area_id'];
 	        }
-
-	        await Promise.all(data.flatMap((area) => area && area.cards || []).map(async (item) => {
-	          try {
-	            if(item) item.card = await item.card;
-	          } catch (_) {
-	            if(item) item.card = null;
-	          }
-	        }));
-
 	        this.data = data;
         this.disabledAreas = disabledAreas;
 
@@ -956,57 +961,16 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _average(data, domain, deviceClass) {
-      const entities = data[domain].filter((entity) =>
-        deviceClass ? entity.attributes.device_class === deviceClass : true
-      );
-      if (!entities) {
-        return undefined;
-      }
-      let uom;
-      const values = entities.filter((entity) => {
-        if (
-          !this._isAvailableEntity(entity) ||
-          !entity.attributes.unit_of_measurement ||
-          isNaN(Number(entity.state))
-        ) {
-          return false;
-        }
-        // if(this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['excluded']){
-        //   return false;
-        // }
-        if (!uom) {
-          uom = entity.attributes.unit_of_measurement;
-          return true;
-        }
-        return entity.attributes.unit_of_measurement === uom;
+      return averageEntityStates(data, domain, deviceClass, {
+        isAvailable: (entity) => this._isAvailableEntity(entity),
       });
-      if (!values.length) {
-        return undefined;
-      }
-      const sum = values.reduce(
-        (total, entity) => total + Number(entity.state),
-        0
-      );
-      return `${Math.round((sum / values.length)*10)/10}${uom}`;
     }
 
     _isOn(data, domain, deviceClass) {
-      const entities = data[domain];
-      if (!entities) {
-        return undefined;
-      }
-      return((
-        deviceClass
-          ? entities.filter(
-              (entity) => entity.attributes.device_class === deviceClass
-            )
-          : entities
-      ).filter(
-        (entity) =>
-          !UNAVAILABLE_STATES.includes(entity.state) &&
-          !STATES_OFF.includes(entity.state)
-          //&& !(this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['excluded'])
-      ).length);
+      return countActiveEntities(data, domain, deviceClass, {
+        unavailableStates: UNAVAILABLE_STATES,
+        statesOff: STATES_OFF,
+      });
     }
 
     _coverOpenCount(data, deviceClass) {
@@ -1036,25 +1000,11 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _climateState(data, domain){
-      const entities = data[domain];
-      if (!entities) {
-        return undefined;
-      }
-      const climateStates = [];
-      for(const climate of entities){
-        //if(!(this.configuration['entities'][climate.entity_id] && this.configuration['entities'][climate.entity_id]['excluded'])){
-          if(climate.attributes['hvac_action'] && climate.attributes['hvac_action'] != 'idle'){
-            const targetTemp = climate.attributes['temperature'] ? ' (' + climate.attributes['temperature'] + this._hass.config.unit_system['temperature'] +')' : "";
-            climateStates.push(this._hass.localize(`state_attributes.climate.hvac_action.${climate.attributes['hvac_action']}`)+targetTemp);
-          } else if(!climate.attributes['hvac_action']){
-            if(!UNAVAILABLE_STATES.includes(climate.state) && !STATES_OFF.includes(climate.state)){
-              const targetTemp = climate.attributes['temperature'] ? ' (' + climate.attributes['temperature'] + this._hass.config.unit_system['temperature'] +')' : "";
-              climateStates.push(this._hass.localize(`component.climate.state._.${climate.state}`)+targetTemp);
-            }
-          }
-        //}
-      }
-      return climateStates.length == 0 ? "" : climateStates.join(", ");
+      return localizedClimateState(data, domain, {
+        hass: this._hass,
+        unavailableStates: UNAVAILABLE_STATES,
+        statesOff: STATES_OFF,
+      });
     }
 
     _handleAreaDisableAllEntitiesClicked(ev){
@@ -1063,7 +1013,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
       const key = ev.currentTarget.key;
       const value = ev.currentTarget.value;
 
-      this._hass.connection.sendMessagePromise({
+      this._hass.callWS({
         type: 'dwains_dashboard/edit_entities_bool_value',
         entities: JSON.stringify([...data.entities]),
         key: key,
@@ -1079,7 +1029,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _handleAreaClick(event){
-      var id = event.currentTarget.dataset.areaId;
+      const id = event.currentTarget.dataset.areaId;
       window.location.hash = id;
       this.selectedArea = id;
       window.scrollTo(0,0);
@@ -1111,68 +1061,37 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _entitiesByDomain(entities){
-      const entitiesByDomain = {};
-
-      for (const entity of entities) {
-          if(this.configuration['entities'][entity] && this.configuration['entities'][entity]['excluded']){
-            continue;
-          }
-
-          const domain = entity.substr(0, entity.indexOf("."));
-
-          if (
-            !TOGGLE_DOMAINS.includes(domain) &&
-            !SENSOR_DOMAINS.includes(domain) &&
-            !ALERT_DOMAINS.includes(domain) &&
-            !COVER_DOMAINS.includes(domain) &&
-            !CLIMATE_DOMAINS.includes(domain) &&
-            !OTHER_DOMAINS.includes(domain)
-          ) {
-            //console.log(domain);
-            continue;
-          }
-
-          const stateObj = this._hass.states[entity];
-
-          if (!stateObj) {
-            continue;
-          }
-
-          const allowedDeviceClasses = SENSOR_DOMAINS.includes(domain)
-            ? this._areaSensorDeviceClasses()
-            : DEVICE_CLASSES[domain];
-
-          if (
-            (SENSOR_DOMAINS.includes(domain) || ALERT_DOMAINS.includes(domain) || COVER_DOMAINS.includes(domain)) &&
-            !allowedDeviceClasses.includes(
-              stateObj.attributes.device_class || ""
-            )
-          ) {
-            //console.log(domain);
-            continue;
-          }
-
-          if (!(domain in entitiesByDomain)) {
-            entitiesByDomain[domain] = [];
-          }
-          entitiesByDomain[domain].push(stateObj);
-      }
-      return entitiesByDomain;
+      return groupEntityStatesByDomain(entities, {
+        states: this._hass.states,
+        excludedEntities: this.configuration.entities,
+        domainGroups: {
+          toggle: TOGGLE_DOMAINS,
+          sensor: SENSOR_DOMAINS,
+          alert: ALERT_DOMAINS,
+          cover: COVER_DOMAINS,
+          climate: CLIMATE_DOMAINS,
+          other: OTHER_DOMAINS,
+        },
+        deviceClasses: DEVICE_CLASSES,
+        sensorDeviceClasses: this._areaSensorDeviceClasses(),
+      });
     }
 
     async createCardElement2(config){
-      // Zorg ervoor dat this.cardHelpers geladen is voordat je verder gaat.
       if (!this.cardHelpers) {
-        console.error("Card helpers zijn niet geladen.");
-        return;
+        this.cardHelpers = await loadCardHelpers();
       }
-
-      return createCardElementSafe(this.cardHelpers, config, this._hass);
+      return createHomepageCardElement({
+        helpers: this.cardHelpers,
+        config,
+        hass: this._hass,
+        createCardElement: createCardElementSafe,
+      });
     }
 
 
     _toggle(ev) {
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.preventDefault();
       ev.stopPropagation();
       if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
@@ -1190,13 +1109,13 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _addLovelaceCard(ev) {
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const area = ev.currentTarget.area;
       const areaName = ev.currentTarget.areaName;
       const position = ev.currentTarget.position;
 
-      window.setTimeout(() => {
+      this._popupOpens.schedule(() => {
 
         popUp(translateEngine(this._hass, 'entity.add_card_to') + areaName, {
           type: "custom:dwains-create-custom-card-card",
@@ -1205,17 +1124,17 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
           page: "areas",
           name: areaName,
         }, true, '');
-      }, 50);
+      });
     }
 
     _handleAreaEditClick(ev) {
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const areaId = ev.currentTarget.area_id;
       const icon = ev.currentTarget.area_icon;
       const disableArea = ev.currentTarget.disable_area;
       const hideIcon = ev.currentTarget.hide_icon;
-      window.setTimeout(() => {
+      this._popupOpens.schedule(() => {
 
         popUp(translateEngine(this._hass, 'area.edit_area_button'), {
           type: "custom:dwains-edit-area-button-card",
@@ -1224,15 +1143,16 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
           disableArea: disableArea,
           hideIcon: hideIcon,
         }, false, '');
-      }, 50);
+      });
     }
 
     _handleEntityEditClick(ev) {
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const entity = ev.currentTarget.entity;
       const friendlyName = ev.currentTarget.friendlyName;
       const hideEntity = ev.currentTarget.hideEntity;
+      const hideEntityInArea = !!this.configuration?.entities?.[entity]?.hidden_in_area;
       const disableEntity = ev.currentTarget.disableEntity;
       const excludeEntity = ev.currentTarget.excludeEntity;
       const colSpan = ev.currentTarget.colSpan;
@@ -1243,13 +1163,14 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
       const rowSpanXl = ev.currentTarget.rowSpanXl;
       const customCard = ev.currentTarget.customCard;
       const customPopup = ev.currentTarget.customPopup;
-      window.setTimeout(() => {
+      this._popupOpens.schedule(() => {
 
         popUp(translateEngine(this._hass, 'entity.edit_entity'), {
           type: "custom:dwains-edit-entity-card",
           entity: entity,
           friendlyName: friendlyName,
           hideEntity: hideEntity,
+          hideEntityInArea: hideEntityInArea,
           disableEntity: disableEntity,
           excludeEntity: excludeEntity,
           colSpan: colSpan,
@@ -1261,40 +1182,42 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
           customCard: customCard,
           customPopup: customPopup,
         }, false, '');
-      }, 50);
+      });
 
     }
 
-    _handleEntityEditBoolValueClick(ev) {
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
-      ev.stopPropagation();
-      const entityId = ev.currentTarget.entity;
-      const key = ev.currentTarget.key;
-      const value = ev.currentTarget.value;
-
-      this._hass.connection.sendMessagePromise({
+    _saveEntityBoolValue(entityId, key, value) {
+      return this._hass.callWS({
         type: 'dwains_dashboard/edit_entity_bool_value',
-        entityId: entityId,
-        key: key,
-        value: value,
-      }).then(
-          (resp) => {
-              console.log(resp);
-          },
-          (err) => {
-              console.error('Message failed!', err);
-          }
+        entityId,
+        key,
+        value,
+      }).catch((err) => {
+        console.error('Failed to update entity setting:', err);
+      });
+    }
+    _handleEntityEditBoolValueClick(ev) {
+      closeParentDropdown(ev);
+      ev.stopPropagation();
+      this._saveEntityBoolValue(
+        ev.currentTarget.entity,
+        ev.currentTarget.key,
+        ev.currentTarget.value,
       );
-
+    }
+    _handleEntityAreaVisibilityClick(ev, entityId, value) {
+      closeParentDropdown(ev);
+      ev.stopPropagation();
+      this._saveEntityBoolValue(entityId, 'hidden_in_area', value);
     }
     _handleAreaEditBoolValueClick(ev) {
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const areaId = ev.currentTarget.areaId;
       const key = ev.currentTarget.key;
       const value = ev.currentTarget.value;
 
-      this._hass.connection.sendMessagePromise({
+      this._hass.callWS({
         type: 'dwains_dashboard/edit_area_bool_value',
         areaId: areaId,
         key: key,
@@ -1311,7 +1234,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _handleEntityEditCardClick(ev) {
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const entityId = ev.currentTarget.entity;
 
@@ -1323,7 +1246,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
         mode = "editor-element";
       }
 
-      window.setTimeout(() => {
+      this._popupOpens.schedule(() => {
 
         popUp(translateEngine(this._hass, 'entity.edit_entity_card'), {
           type: "custom:dwains-edit-entity-card-card",
@@ -1332,12 +1255,11 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
           mode: mode,
           existingCardEdit: cardConfig ? true : false,
         }, true, '');
-      }, 50);
+      });
     }
 
     _handleEntityEditPopupClick(ev) {
-      window.__ddReloadReturnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}${this.selectedArea ? `#${this.selectedArea}` : window.location.hash}`;
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const entityId = ev.currentTarget.entity;
 
@@ -1349,7 +1271,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
         mode = "editor-element";
       }
 
-      window.setTimeout(() => {
+      this._popupOpens.schedule(() => {
 
         popUp(translateEngine(this._hass, 'entity.edit_entity_popup_card'), {
           type: "custom:dwains-edit-entity-popup-card",
@@ -1358,15 +1280,15 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
           mode: mode,
           existingCardEdit: cardConfig ? true : false,
         }, true, '');
-      }, 50);
+      });
     }
 
     _handleEntityAddToFavoritesClick(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const entityId = ev.currentTarget.entity;
 
-      this._hass.connection.sendMessagePromise({
+      this._hass.callWS({
         type: 'dwains_dashboard/edit_entity_favorite',
         entityId: entityId,
         favorite: true,
@@ -1381,11 +1303,11 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _handleEntityRemoveFromFavoritesClick(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const entityId = ev.currentTarget.entity;
 
-      this._hass.connection.sendMessagePromise({
+      this._hass.callWS({
         type: 'dwains_dashboard/edit_entity_favorite',
         entityId: entityId,
         favorite: false,
@@ -1402,7 +1324,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 
 
     _handleAreaViewDisplayGroupedClicked(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
 
       const value = ev.currentTarget.value;
@@ -1422,7 +1344,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _handleAreaDisplayGroupedClicked(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
 
       const value = ev.currentTarget.value;
@@ -1436,14 +1358,15 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _handleFavoriteEditModeClicked(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const value = ev.currentTarget.value;
 
       if(value){
         this._sortable = [];
         const sortableElements = this.shadowRoot.querySelectorAll('.sortable');
-        for(var i=0; i<sortableElements.length; i++){
+        const cardHass = this._hass;
+        for(let i=0; i<sortableElements.length; i++){
           this._sortable[i] = new Sortable(sortableElements[i], {
               forceFallback: true,
               animation: 150,
@@ -1451,7 +1374,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
               handle: '.sortable-move',
               onEnd: function(event){
                 console.log(event);
-                hass().connection.sendMessagePromise({
+                cardHass.callWS({
                     type: 'dwains_dashboard/sort_entity',
                     sortData: JSON.stringify(this.toArray()),
                     sortType: 'favorite_sort_order',
@@ -1474,14 +1397,15 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _handleAreaEditModeClicked(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const value = ev.currentTarget.value;
 
       if(value){
         this._sortable = [];
         const sortableElements = this.shadowRoot.querySelectorAll('.sortable');
-        for(var i=0; i<sortableElements.length; i++){
+        const cardHass = this._hass;
+        for(let i=0; i<sortableElements.length; i++){
           const sortType = (this.areaDisplayGrouped ? 'grouped_sort_order' : 'sort_order');
           this._sortable[i] = new Sortable(sortableElements[i], {
               forceFallback: true,
@@ -1490,7 +1414,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
               handle: '.sortable-move',
               onEnd: function(event){
                 console.log(event);
-                hass().connection.sendMessagePromise({
+                cardHass.callWS({
                     type: 'dwains_dashboard/sort_area_button',
                     sortData: JSON.stringify(this.toArray()),
                     sortType: sortType
@@ -1522,7 +1446,8 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     _initAreaViewSortables(){
       this._sortable = [];
       const sortableElements = this.shadowRoot.querySelectorAll('.area-view-entity-sortable');
-      for(var i=0; i<sortableElements.length; i++){
+      const cardHass = this._hass;
+      for(let i=0; i<sortableElements.length; i++){
         const sortType = (this.areaViewDisplayGrouped ? 'grouped_sort_order' : 'sort_order');
         this._sortable[i] = new Sortable(sortableElements[i], {
             forceFallback: true,
@@ -1530,7 +1455,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
             dataIdAttr: "data-entity",
             handle: '.sortable-move',
             onEnd: function(event){
-              hass().connection.sendMessagePromise({
+              cardHass.callWS({
                   type: 'dwains_dashboard/sort_entity',
                   sortData: JSON.stringify(this.toArray()),
                   sortType: sortType
@@ -1557,7 +1482,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _handleAreaViewEditModeClicked(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const value = ev.currentTarget.value;
       this.areaViewEditMode = value;
@@ -1570,14 +1495,10 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
     }
 
     _handleCustomCardEditClick(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const areaId = ev.currentTarget.area_id;
       const filename = ev.currentTarget.filename;
-
-      const loader = document.createElement("hui-masonry-view");
-      loader.lovelace = { editMode: true };
-      loader.willUpdate(new Map());
 
       const colSpan = ev.currentTarget.colSpan;
       const rowSpan = ev.currentTarget.rowSpan;
@@ -1587,7 +1508,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
       const rowSpanXl = ev.currentTarget.rowSpanXl;
 
       const cardConfig = this.configuration.area_cards[areaId][filename];
-      var position = "top";
+      let position = "top";
       if(cardConfig["position"]){
         //Config has the DD position key, but editor doesnt understand that so remove it and parse it to editor
         position = cardConfig["position"];
@@ -1601,7 +1522,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
       delete cardConfig["col_span_xl"];
       delete cardConfig["row_span_xl"];
 
-      window.setTimeout(() => {
+      this._popupOpens.schedule(() => {
 
         popUp(this._hass.localize("ui.components.entity.entity-picker.edit"), {
           type: "custom:dwains-create-custom-card-card",
@@ -1618,13 +1539,13 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
           colSpanXl: colSpanXl,
           rowSpanXl: rowSpanXl,
           }, true, '');
-      }, 50);
+      });
     }
 
     _renderAreaButtons(data){
       if(!this.areaDisplayGrouped){
         return html`
-          <div class="grid grid-cols-2 md-grid-cols-3 ${this.configuration['homepage_header']['v2_mode'] ? "lg-grid-cols-4 xl-grid-cols-5" : ""} gap-4 sortable">
+          <div class="grid grid-cols-2 dd-overview-grid md-grid-cols-3 ${this.configuration['homepage_header']['v2_mode'] ? "lg-grid-cols-4 xl-grid-cols-5" : ""} gap-4 sortable">
             ${data.map((i) => this._renderAreaButton(i))}
           </div>`;
       } else {
@@ -1656,7 +1577,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
           html`
             <div class="mb-5">
               <h3 class="font-semibold capitalize text-gray">${key.replace(/_/g, " ")}</h3>
-              <div class="grid grid-cols-2 md-grid-cols-3 ${this.configuration['homepage_header']['v2_mode'] ? "lg-grid-cols-4 xl-grid-cols-5" : ""} gap-4 sortable">
+              <div class="grid grid-cols-2 dd-overview-grid md-grid-cols-3 ${this.configuration['homepage_header']['v2_mode'] ? "lg-grid-cols-4 xl-grid-cols-5" : ""} gap-4 sortable">
               ${Object.entries(group[key]).map(([k,v]) => html`${this._renderAreaButton(v)}`)}
               </div>
             </div>
@@ -1691,44 +1612,15 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
       `;
     }
     _areaSensorDeviceClasses() {
-      const header =
-        this.configuration && this.configuration["homepage_header"]
-          ? this.configuration["homepage_header"]
-          : {};
-
-      if (Object.prototype.hasOwnProperty.call(header, "area_sensor_device_classes")) {
-        return Array.isArray(header["area_sensor_device_classes"])
-          ? header["area_sensor_device_classes"]
-          : [];
-      }
-
-      return ["temperature", "humidity"];
+      return areaSensorDeviceClasses(this.configuration);
     }
 
     _areaBinarySensorDeviceClasses() {
-      const header =
-        this.configuration && this.configuration["homepage_header"]
-          ? this.configuration["homepage_header"]
-          : {};
-      const value = header["area_binary_sensor_device_classes"];
-
-      if(Array.isArray(value)){
-        return value;
-      }
-      return value ? [value] : [];
+      return areaBinarySensorDeviceClasses(this.configuration);
     }
 
     _areaBinarySensorEntities() {
-      const header =
-        this.configuration && this.configuration["homepage_header"]
-          ? this.configuration["homepage_header"]
-          : {};
-      const value = header["area_binary_sensor_entities"];
-
-      if(Array.isArray(value)){
-        return value;
-      }
-      return value ? [value] : [];
+      return areaBinarySensorEntities(this.configuration);
     }
 
     _areaBinarySensorLabel(deviceClass) {
@@ -1747,62 +1639,28 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
       return entity && !UNAVAILABLE_STATES.includes(entity.state);
     }
 
-    _isAvailableBinarySensor(entity) {
-      return this._isAvailableEntity(entity);
-    }
-
     _areaBinarySensorSummary(deviceClass, activeCount) {
-      const summary = AREA_BINARY_SENSOR_SUMMARY_KEYS[deviceClass];
-      if(summary){
-        const key = activeCount === 0
-          ? summary.zero
-          : activeCount === 1
-            ? summary.one
-            : summary.many;
-        return this._translateAreaBinarySensorText(key, { count: activeCount });
-      }
-
       const label = this._areaBinarySensorLabel(deviceClass);
-      if(activeCount === 0){
-        return this._translateAreaBinarySensorText("area_binary_sensor.summary.fallback.zero", { label });
-      }
-      if(activeCount === 1){
-        return this._translateAreaBinarySensorText("area_binary_sensor.summary.fallback.one", { label });
-      }
-      return this._translateAreaBinarySensorText("area_binary_sensor.summary.fallback.many", {
+      return this._translateAreaBinarySensorText(
+        summaryTranslationKey(deviceClass, activeCount),
+        {
         count: activeCount,
         label,
-      });
-    }
-
-    _isActiveBinarySensor(entity) {
-      return (
-        this._isAvailableBinarySensor(entity) &&
-        !STATES_OFF.includes(entity.state)
+        },
       );
     }
 
     _entityBelongsToArea(entityId, areaId) {
-      const entity = this.entitiesById && this.entitiesById.get(entityId)
-        ? this.entitiesById.get(entityId)
-        : (this.entities || []).find((entry) => entry.entity_id === entityId);
-      if(!entity){
-        return false;
-      }
-      if(entity.area_id){
-        return entity.area_id === areaId;
-      }
-      if(entity.device_id && this.devicesById){
-        const device = this.devicesById.get(entity.device_id);
-        return !!device && device.area_id === areaId;
-      }
-      return false;
+      return entityBelongsToArea(entityId, areaId, {
+        entitiesById: this.entitiesById,
+        entities: this.entities,
+        devicesById: this.devicesById,
+      });
     }
 
     _areaEntityIdsForArea(areaId) {
-      return (this.entities || [])
+      return (this.entitiesByAreaId?.get(areaId) || [])
         .filter((entity) => !entity.hidden_by)
-        .filter((entity) => this._entityBelongsToArea(entity.entity_id, areaId))
         .filter((entity) => !(this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['disabled']))
         .filter((entity) => this._hass.states[entity.entity_id])
         .map((entity) => entity.entity_id);
@@ -1822,37 +1680,23 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 
     _areaBinarySensorValues(area) {
       const areaId = area.area_id;
-      const entityIds = this._areaEntityIdsForArea(areaId);
-      const binarySensors = entityIds
-        .map((entityId) => this._hass.states[entityId])
-        .filter((entity) => entity && computeDomain(entity.entity_id) == "binary_sensor");
-      const values = [];
-
-      this._areaBinarySensorDeviceClasses().forEach((deviceClass) => {
-        const matchingSensors = binarySensors
-          .filter((entity) => entity.attributes.device_class === deviceClass)
-          .filter((entity) => this._isAvailableBinarySensor(entity));
-
-        if(matchingSensors.length > 0){
-          const count = matchingSensors
-            .filter((entity) => this._isActiveBinarySensor(entity))
-            .length;
-          values.push(this._areaBinarySensorSummary(deviceClass, count));
-        }
+      return collectAreaBinarySensorValues({
+        areaId,
+        areaEntityIds: this._areaEntityIdsForArea(areaId),
+        states: this._hass.states,
+        deviceClasses: this._areaBinarySensorDeviceClasses(),
+        explicitEntityIds: this._areaBinarySensorEntities(),
+        unavailableStates: UNAVAILABLE_STATES,
+        offStates: STATES_OFF,
+        belongsToArea: (entityId, targetAreaId) => (
+          this._entityBelongsToArea(entityId, targetAreaId)
+        ),
+        summary: (deviceClass, count) => (
+          this._areaBinarySensorSummary(deviceClass, count)
+        ),
+        displayName: (entityId) => this._entityDisplayName(entityId),
+        stateLabel: (entity) => this._binarySensorStateLabel(entity),
       });
-
-      this._areaBinarySensorEntities().forEach((entityId) => {
-        if(!this._entityBelongsToArea(entityId, areaId)){
-          return;
-        }
-        const entity = this._hass.states[entityId];
-        if(!entity || UNAVAILABLE_STATES.includes(entity.state)){
-          return;
-        }
-        values.push(`${this._entityDisplayName(entityId)}: ${this._binarySensorStateLabel(entity)}`);
-      });
-
-      return values;
     }
 
     _renderAreaButton(data){
@@ -2060,7 +1904,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 	      return html`
 	      <div class="col-span-${data.colSpan} row-span-${data.rowSpan} lg-col-span-${data.colSpanLg} lg-row-span-${data.rowSpanLg} xl-col-span-${data.colSpanXl} xl-row-span-${data.rowSpanXl} relative">
 	        <div>
-	          <dd-lazy-card .card=${data.card}></dd-lazy-card>
+	          <dd-lazy-card .card=${data.card} .cardFactory=${data.cardFactory} .hass=${this._hass}></dd-lazy-card>
 	        </div>
         ${this.areaViewEditMode ? html`
         <ha-card>
@@ -2155,6 +1999,28 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
         `;
       }
     }
+    _renderEntityAreaVisibilityAction(entity) {
+      const hiddenInArea = this.configuration?.entities?.[entity]?.hidden_in_area === true;
+      return html`
+        <ha-list-item
+          graphic="icon"
+          @click=${(ev) => this._handleEntityAreaVisibilityClick(
+            ev,
+            entity,
+            !hiddenInArea,
+          )}
+        >
+          <div slot="graphic">
+            <ha-icon .icon=${hiddenInArea ? "mdi:eye" : "mdi:eye-off"}></ha-icon>
+          </div>
+          ${translateEngine(
+            this._hass,
+            hiddenInArea ? 'entity.unhide_in_area' : 'entity.hide_in_area',
+          )}
+        </ha-list-item>
+      `;
+    }
+
     _renderAreaViewCard(data){
       return html`
 	      <div
@@ -2162,7 +2028,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 	        class="col-span-${data.colSpan} row-span-${data.rowSpan} lg-col-span-${data.colSpanLg} lg-row-span-${data.rowSpanLg} xl-col-span-${data.colSpanXl} xl-row-span-${data.rowSpanXl} relative"
 	      >
 	        <div>
-	          <dd-lazy-card .card=${data.card}></dd-lazy-card>
+	          <dd-lazy-card .card=${data.card} .cardFactory=${data.cardFactory} .hass=${this._hass}></dd-lazy-card>
 	        </div>
         ${this.areaViewEditMode ? html`
         <ha-card>
@@ -2265,6 +2131,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                   </div>
                   ${translateEngine(this._hass, 'entity.hide')}
                 </ha-list-item>
+                ${this._renderEntityAreaVisibilityAction(data.entity)}
                 <ha-list-item
                   graphic="icon"
                   .entity="${data.entity}"
@@ -2355,8 +2222,8 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 
         return html`
           <div class="dd-area-view w-full mb-12 ${visible}" id="${data.area.area_id}">
-            <div class="dd-area-view-header flex justify-between">
-              <div class="dd-area-view-title sticky top-0">
+            <div class="dd-area-view-header dd-detail-view-header flex justify-between">
+              <div class="dd-area-view-title dd-detail-view-title sticky top-0">
                 <h2 class="font-semibold text-lg">
                   ${data.area.name}
                 </h2>
@@ -2523,7 +2390,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 	      return html`
 	      <div data-entity='${data.entity}' class="col-span-${data.colSpan} row-span-${data.rowSpan} lg-col-span-${data.colSpanLg} lg-row-span-${data.rowSpanLg}  relative">
 	        <div>
-	          <dd-lazy-card .card=${data.card}></dd-lazy-card>
+	          <dd-lazy-card .card=${data.card} .cardFactory=${data.cardFactory} .hass=${this._hass}></dd-lazy-card>
 	        </div>
         ${this.favoriteEditMode ? html`
         <ha-card>
@@ -2600,6 +2467,7 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
                   </div>
                   ${translateEngine(this._hass, 'entity.remove_from_favorites')}
                 </ha-list-item>
+                ${this._renderEntityAreaVisibilityAction(data.entity)}
             </ha-dropdown>
           </div>
         </ha-card>` : ""}
@@ -2680,12 +2548,12 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
         return html``;
       } else {
         //Clock
-        var d = new Date(),
-        h = (d.getHours() < 10 ? "0" : "") + d.getHours(),
-        m = (d.getMinutes() < 10 ? "0" : "") + d.getMinutes(),
-        dateNice = d.toLocaleDateString(this._hass.locale.language, { weekday: 'long', month: 'short', day: 'numeric' }),
-        greeting,
-        currTimeAmPm = h >= 12 ? `${h - 12}:${m} pm` : `${h}:${m} am`;
+        const d = new Date();
+        const h = (d.getHours() < 10 ? "0" : "") + d.getHours();
+        const m = (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+        const dateNice = d.toLocaleDateString(this._hass.locale.language, { weekday: 'long', month: 'short', day: 'numeric' });
+        const currTimeAmPm = h >= 12 ? `${h - 12}:${m} pm` : `${h}:${m} am`;
+        let greeting;
 
         if(d.getHours() < 12){
           //Morning
@@ -2880,6 +2748,29 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
 
     static get styles() {
       return [css`
+        :host {
+          display: block;
+          box-sizing: border-box;
+          width: 100%;
+          min-width: 0;
+          max-width: 100%;
+        }
+        .dd-overview-grid {
+          box-sizing: border-box;
+          width: 100%;
+          min-width: 0;
+          max-width: 100%;
+        }
+        @media (max-width: 599px) {
+          .w-full {
+            box-sizing: border-box;
+            max-width: 100%;
+          }
+          .grid.dd-overview-grid > * {
+            min-width: 0;
+            max-width: 100%;
+          }
+        }
         .back-button {
           margin-right: 1rem;
           margin-bottom: 3.4rem;
@@ -3181,11 +3072,6 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
             width: 0;
             height: 0;
         }
-        @media (min-width: 1024px) {
-            .dd-homepage-columns {
-                min-width: 1024px;
-            }
-        }
         .gap-4 {
             gap: 1rem
         }
@@ -3377,9 +3263,9 @@ const AREA_BINARY_SENSOR_SUMMARY_KEYS = {
             grid-template-columns: repeat(5, minmax(0, 1fr))
           }
       }
-        `, subtleHomepageStyles(css)]
+        `, subtleHomepageStyles(css), subtleDetailViewStyles(css)]
     }
 
 
   }
-  customElements.define("homepage-card", HomepageCard);
+  defineDwainsElement("homepage-card", HomepageCard);

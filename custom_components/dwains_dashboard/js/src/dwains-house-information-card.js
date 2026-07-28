@@ -1,10 +1,10 @@
-import { css, html, LitElement } from 'lit-element';
-import { moreInfo } from "card-tools/src/more-info";
+import { css, html, LitElement } from 'lit';
+import { moreInfo } from "./card-tools-compat";
 import { popUp } from "./dwains-popup";
-import { fireEvent } from "card-tools/src/event";
+import { fireEvent } from "./card-tools-compat";
 import {
     computeDomain
-} from 'custom-card-helpers';
+} from './frontend-helpers';
 import {
     STATES_OFF,
     UNAVAILABLE_STATES,
@@ -16,11 +16,26 @@ import {
     DEVICE_CLASSES,
     DOMAIN_STATE_ICONS
 } from './variables';
+const { defineDwainsElement } = require('./custom-element-registration');
 import translateEngine from './translate-engine';
 import { myComputeStateDisplay, resolveEntityName } from "./helpers";
 import { subtleHouseInformationStyles } from './styles/dwains-subtle-style';
+const { loadDashboardRegistrySnapshot } = require('./dashboard-registry-snapshot');
+const { loadCardHelpers } = require('./card-helpers-loader');
+const { TimerOwner } = require('./timer-owner');
+const { PopupOpenScheduler } = require('./popup-open-scheduler');
+const { ReloadableLoadOwner } = require('./reloadable-load-owner');
+const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
+const { isEntityHiddenInArea } = require('./entity-aggregation');
 //Herschreven
 class DwainsHouseInformationCard extends LitElement {
+    constructor() {
+        super();
+        this._timers = new TimerOwner();
+        this._popupOpens = new PopupOpenScheduler(this._timers);
+        this._loads = new ReloadableLoadOwner((context) => this._loadConfiguration(context));
+    }
+
     static get styles() {
         return [css`
       ha-card {
@@ -169,8 +184,10 @@ class DwainsHouseInformationCard extends LitElement {
     }
 
     set hass(hass) {
+      const connectionChanged = hasHassConnectionChanged(this._hass, hass);
       this._hass = hass;
       this.requestUpdate();
+      void this._startIfReady(connectionChanged);
     }
 
     _entityDisplayName(entityId, entityRegistryEntry) {
@@ -189,46 +206,48 @@ class DwainsHouseInformationCard extends LitElement {
 
     async connectedCallback() {
         super.connectedCallback();
-        await this._loadData(); //Load data
+        this._timers.connect();
+        await this._startIfReady();
+    }
+
+    async _startIfReady(reload = false) {
+        const connection = hassConnectionIdentity(this._hass);
+        if (!this.isConnected || !this._hass || this._startedHass === connection) return;
+        const hass = this._hass;
+        this._startedHass = connection;
+        try {
+            if (reload) await this._loads.reload();
+            else await this._loadData();
+        } catch (error) {
+            if (this._startedHass === connection) this._startedHass = undefined;
+            console.error('Error starting house information card:', error);
+        }
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this._startedHass = undefined;
+        this._loads.invalidate();
+        this._timers.disconnect();
     }
 
     async _reloadCard() {
-        await this._loadData();
+        await this._loads.reload();
         this.requestUpdate();
     }
 
-    async _loadData() {
-        const [areas, devices, entities, configuration] = await Promise.all([
-            this._hass.callWS({
-                type: "config/area_registry/list"
-            }),
-            this._hass.callWS({
-                type: "config/device_registry/list"
-            }),
-            this._hass.callWS({
-                type: "config/entity_registry/list"
-            }),
-            this._hass.callWS({
-                type: 'dwains_dashboard/configuration/get'
-            }),
-        ]);
+    _loadData() {
+        return this._loads.load();
+    }
 
-        this.areas = areas;
-        this.devices = devices;
-        this.entities = entities;
-        this.configuration = configuration;
+    async _loadConfiguration({ isCurrent = () => true } = {}) {
+        const snapshot = await loadDashboardRegistrySnapshot(this._hass);
+        if (!isCurrent()) return;
+        Object.assign(this, snapshot);
 
-	    this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
-	    this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
-
-        if (!window.__dd_house_information_card_helpers && typeof window.loadCardHelpers === 'function') {
-            window.__dd_house_information_card_helpers = (
-                window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers()
-            ).catch(() => {
-                window.__dd_house_information_card_helpers = undefined;
-                return undefined;
-            });
-        }
+        loadCardHelpers().catch((error) => {
+            console.error("Failed to preload house-information card helpers", error);
+        });
 
         if (this.areas == null || this.areas.length === 0
             || this.devices == null || this.devices.length === 0
@@ -262,33 +281,20 @@ class DwainsHouseInformationCard extends LitElement {
                 if (
                     !(this.configuration['areas'][area.area_id] && this.configuration['areas'][area.area_id]['disabled'])
                 ) {
-                    const areaDevices = new Set();
                     const areaEntities = new Set();
                     const areaCardsByDomain = [];
                     const areaEntitiesNoState = [];
 
-                    // Find all devices linked to this area
-                    for (const device of this.devices) {
-                        if (device.area_id === area.area_id) {
-                            areaDevices.add(device.id);
-                        }
-                    }
-
-                    // Find all entities directly linked to this area
-                    // or linked to a device linked to this area.
-                    for (const entity of this.entities) {
-                        if (
-                            !entity.hidden_by && (
-                            entity.area_id
-                                ? entity.area_id === area.area_id
-                                : areaDevices.has(entity.device_id)
-                            )
-                        ) {
+                    for (const entity of this.entitiesByAreaId.get(area.area_id) || []) {
+                        if (!entity.hidden_by) {
                             const disableEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['disabled'] ? true : false) : false;
                             const excludeEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['excluded'] ? true : false) : false;
                             const hideEntity = this.configuration['entities'][entity.entity_id] ? (this.configuration['entities'][entity.entity_id]['hidden'] ? true : false) : false;
+                            const hideEntityInArea = isEntityHiddenInArea(
+                                this.configuration['entities']?.[entity.entity_id],
+                            );
 
-                            if (!disableEntity && !excludeEntity && !hideEntity) {
+                            if (!disableEntity && !excludeEntity && !hideEntity && !hideEntityInArea) {
                                 const friendlyName = this._entityDisplayName(entity.entity_id, entity);
                                 const domain = computeDomain(entity.entity_id);
 
@@ -330,15 +336,20 @@ class DwainsHouseInformationCard extends LitElement {
             const configured = this.domains?.[domain]?.entities;
             const entities = domain === 'climate' && (!configured || configured.length === 0)
                 ? Object.keys(this._hass.states)
-                    .filter((entityId) => entityId.startsWith('climate.'))
+                    .filter((entityId) =>
+                        entityId.startsWith('climate.')
+                        && !isEntityHiddenInArea(
+                            this.configuration?.entities?.[entityId],
+                        )
+                    )
                     .map((entityId) => ({
                         entity_id: entityId,
                         area: {},
                         friendlyName: this._entityDisplayName(entityId),
                     }))
                 : (configured || []);
-            window.setTimeout(() => {
-                fireEvent("hass-more-info", { entityId: "" }, document.querySelector("home-assistant"));
+            this._popupOpens.schedule(() => {
+                fireEvent("hass-more-info", { entityId: "" }, this);
                 popUp(translateEngine(this._hass, 'device.' + domain), {
                     type: "custom:dwains-house-information-more-info-card",
                     domain: domain,
@@ -346,7 +357,7 @@ class DwainsHouseInformationCard extends LitElement {
                     deviceClass: domain === 'climate' ? '' : deviceClass,
                     configuration: this.configuration,
                 }, true, '');
-            }, 50);
+            });
         }
     }
 
@@ -364,7 +375,7 @@ class DwainsHouseInformationCard extends LitElement {
             (entity) => {
                 const config = this.configuration?.entities?.[entity.entity_id];
                 return !entity.hidden_by &&
-                    !(config?.disabled || config?.excluded || config?.hidden) &&
+                    !(config?.disabled || config?.excluded || config?.hidden || config?.hidden_in_area) &&
                     !UNAVAILABLE_STATES.includes(entity.state) &&
                     !STATES_OFF.includes(entity.state);
             }
@@ -570,4 +581,4 @@ class DwainsHouseInformationCard extends LitElement {
     }
 }
 
-customElements.define("dwains-house-information-card", DwainsHouseInformationCard);
+defineDwainsElement("dwains-house-information-card", DwainsHouseInformationCard);

@@ -1,23 +1,46 @@
-import { hass } from "card-tools/src/hass";
 import { popUp } from "./dwains-popup";
-import { fireEvent } from "card-tools/src/event";
+import { fireEvent } from "./card-tools-compat";
 import Cookies from 'js-cookie'
 import {
   DOMAIN_ICONS,
  } from './variables'
 import {
   computeDomain
-} from 'custom-card-helpers';
+} from './frontend-helpers';
 import { mdiDotsVertical, mdiCog } from "@mdi/js";
-import { css, html, LitElement } from 'lit-element';
+import { css, html, LitElement } from 'lit';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import translateEngine from './translate-engine';
 import { createCardElementSafe, resolveEntityName } from './helpers';
-import { subtleBackButtonStyles, subtleDevicesPageStyles } from './styles/dwains-subtle-style';
+import {
+  subtleBackButtonStyles,
+  subtleDetailViewStyles,
+  subtleDevicesPageStyles,
+} from './styles/dwains-subtle-style';
+const { EventSubscriptionOwner } = require('./event-subscription-owner');
+const { EventListenerOwner } = require('./event-listener-owner');
+const { TimerOwner } = require('./timer-owner');
+const { PopupOpenScheduler } = require('./popup-open-scheduler');
+const { ReloadableLoadOwner } = require('./reloadable-load-owner');
+const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
+const { websocketReadStore } = require('./websocket-read-store');
+const { loadDashboardRegistrySnapshot } = require('./dashboard-registry-snapshot');
+const { registryOrderedEntityUnion } = require('./registry-indexes');
+const { resolveHass } = require('./hass-provider');
+const { loadCardHelpers } = require('./card-helpers-loader');
+const { closeParentDropdown } = require('./dropdown-controller');
+const { defineDwainsElement } = require('./custom-element-registration');
+const { attachDeferredCard } = require('./deferred-card');
 
 function getDwainsHass() {
-  return (window.__dd_get_hass && window.__dd_get_hass()) || hass();
+  return resolveHass();
 }
+
+const GLOBAL_DEVICE_PAGE_DOMAINS = new Set([
+  'person',
+  'weather',
+  'alarm_control_panel',
+]);
 
 	    class DevicesCard extends LitElement {
         static get properties() {
@@ -30,16 +53,26 @@ function getDwainsHass() {
           };
         }
 
-	        async loadHelpers() {
-	          if (window.__dd_wait_card_helpers) {
-	            return await window.__dd_wait_card_helpers();
-	          }
-	          if (typeof window.loadCardHelpers === 'function') {
-	            return await window.loadCardHelpers();
-	          } else {
-	            console.warn('loadCardHelpers is not available, ensure you are running a compatible version of Home Assistant');
-          }
+        constructor() {
+          super();
+          this._subscriptions = new EventSubscriptionOwner();
+          this._listeners = new EventListenerOwner();
+          this._timers = new TimerOwner();
+          this._popupOpens = new PopupOpenScheduler(this._timers);
+          this._loads = new ReloadableLoadOwner((context) => this._loadConfiguration(context));
+          this._locationChangedHandler = () => this._syncSelectedDeviceFromLocation();
+          this._listeners.listen(
+            'location-changed',
+            window,
+            'location-changed',
+            this._locationChangedHandler,
+          );
+          this._startedHass = undefined;
         }
+
+	        async loadHelpers() {
+	          return loadCardHelpers();
+	        }
 
         _entityDisplayName(entityId, entityRegistryEntry) {
           const entityEntry = entityRegistryEntry || this.entitiesById?.get(entityId);
@@ -59,9 +92,16 @@ function getDwainsHass() {
          * @param {any} hass
          */
         set hass(hass) {
+          const connectionChanged = hasHassConnectionChanged(this._hass, hass);
+          this._hass = hass;
           if(this.startedUp){
             this._update_hass(hass);
           }
+          if (connectionChanged && this.isConnected) {
+            this._subscriptions.disconnect();
+            this._subscriptions.connect();
+          }
+          void this._startIfReady(connectionChanged);
         }
 
 	        _update_hass(hass){
@@ -83,19 +123,32 @@ function getDwainsHass() {
 	            }
 	          });
 
-	          if(this.timeout) return;
+	          if(this.timeout) {
+	            this._pendingHassUpdate = true;
+	            return;
+	          }
 	          this.timeout = true;
-	          window.setTimeout(() => {this.timeout = false;}, 100);
+	          this._pendingHassUpdate = false;
+	          const timer = this._timers.schedule('hass-update-throttle', () => {
+	            this.timeout = false;
+	            if(this._pendingHassUpdate){
+	              this._pendingHassUpdate = false;
+	              this.requestUpdate();
+	            }
+	          }, 100);
+	          if(timer === undefined){
+	            this.timeout = false;
+	            this._pendingHassUpdate = false;
+	          }
 	          this.requestUpdate();
 	        }
 
         async setConfig(config) {
           this.startedUp = false;
           this.timeout = false;
+          this._pendingHassUpdate = false;
 
-	          this._hass = getDwainsHass();
-
-          this.cardHelpers = await this.loadHelpers();
+	          if (!this._hass) this._hass = getDwainsHass();
 
           this.selectedDevice = window.location.hash.substring(1);
           this.deviceEditMode = false;
@@ -105,21 +158,26 @@ function getDwainsHass() {
 
           this.notificationCard, this.weatherCard;
 
-          window.addEventListener("location-changed", () => this.updated(new Map()));
+          this._cardHelpersReady = this.loadHelpers();
+          this.cardHelpers = await this._cardHelpersReady;
+          await this._startIfReady();
         }
 
         updated(changedProperties) {
           if(!changedProperties.has("state")) {
-            let newstate = undefined;
-            newstate = window.location.hash.substring(1);
+            this._syncSelectedDeviceFromLocation();
+          }
+        }
 
-            if (newstate){
-              this.selectedDevice = newstate;
-            } else {
-              //The tab/page itself is clicked so fallback on first device button
-              if(this.data != null && Object.keys(this.data).length != 0){
-                this.selectedDevice = Object.values(this.data)[0]['domain'];
-              }
+        _syncSelectedDeviceFromLocation() {
+          const newstate = window.location.hash.substring(1);
+
+          if (newstate){
+            this.selectedDevice = newstate;
+          } else {
+            //The tab/page itself is clicked so fallback on first device button
+            if(this.data != null && Object.keys(this.data).length != 0){
+              this.selectedDevice = Object.values(this.data)[0]['domain'];
             }
           }
         }
@@ -127,52 +185,74 @@ function getDwainsHass() {
 	        async connectedCallback(){
 	          //console.log('connectedCallBack');
 	          super.connectedCallback();
+	          this._subscriptions.connect();
+	          this._timers.connect();
+	          this._listeners.connect();
 
-	          await this._loadData(); //Load areas
-
-	          if(!this._unsub){
-	            this._unsub = await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_devicespage_card_reload");
-	          }
+	          await this._startIfReady();
 	        }
+
+          async _startIfReady(reload = false) {
+            const connection = hassConnectionIdentity(this._hass);
+            if (!this.isConnected || !this._hass || !this._config || this._startedHass === connection) return;
+            const hass = this._hass;
+            this._startedHass = connection;
+            try {
+              if(this._cardHelpersReady){
+                this.cardHelpers = await this._cardHelpersReady;
+              }
+              if (reload) await this._reloadCard();
+              else await this._loadData();
+              if (this.isConnected && hassConnectionIdentity(this._hass) === connection && this._startedHass === connection) {
+                await this._subscribeReload();
+              }
+            } catch (error) {
+              if (this._startedHass === connection) this._startedHass = undefined;
+              console.error('Error starting devices page card:', error);
+            }
+          }
 
 	        disconnectedCallback(){
 	          super.disconnectedCallback();
-	          if(this._unsub){
-	            Promise.resolve(this._unsub()).catch(() => {});
-	            this._unsub = undefined;
-	          }
+	          this._subscriptions.disconnect();
+	          this._timers.disconnect();
+	          this._listeners.disconnect();
+	          this._startedHass = undefined;
+              this._loads.invalidate();
+	          this.timeout = false;
+	          this._pendingHassUpdate = false;
+	        }
+
+	        _subscribeReload(){
+	          return this._subscriptions.subscribeEvent(
+	            'devices-page',
+	            this._hass,
+	            "dwains_dashboard_devicespage_card_reload",
+	            () => {
+	              websocketReadStore.invalidate(this._hass);
+	              this._reloadCard().catch((error) => {
+	                console.error('Error reloading devices page card:', error);
+	              });
+	            },
+	          );
 	        }
 
         async _reloadCard(){
-          await this._loadData();
+          await this._loads.reload();
           this.requestUpdate();
         }
 
-	        async _loadData(){
+	        _loadData(){
+	          return this._loads.load();
+	        }
+
+	        async _loadConfiguration({ isCurrent = () => true } = {}){
 	          this.selectedArea = this.selectedArea || "";
 	          this.startedUp = false;
 
-          [
-            this.areas,
-            this.devices,
-            this.entities,
-            this.configuration,
-          ] = await Promise.all([
-            this._hass.callWS({
-              type: "config/area_registry/list"
-            }),
-            this._hass.callWS({
-              type: "config/device_registry/list"
-            }),
-            this._hass.callWS({
-              type: "config/entity_registry/list"
-            }),
-            this._hass.callWS({
-              type: 'dwains_dashboard/configuration/get'
-            }),
-          ]);
-	          this.devicesById = new Map((this.devices || []).map((device) => [device.id, device]));
-	          this.entitiesById = new Map((this.entities || []).map((entity) => [entity.entity_id, entity]));
+          const snapshot = await loadDashboardRegistrySnapshot(this._hass);
+          if (!isCurrent()) return;
+          Object.assign(this, snapshot);
 
           if(this.areas == null || this.areas.length === 0
           || this.devices == null || this.devices.length === 0
@@ -180,31 +260,27 @@ function getDwainsHass() {
           || this.configuration == null || this.configuration.length === 0
           ){
           } else {
-            //for the ha-icon-picker?
-            const loader = document.createElement("hui-masonry-view");
-            loader.lovelace = { editMode: true };
-            loader.willUpdate(new Map());
-            //end for the ha-icon-picker
-
             const data = [];
             const disabledDevices = [];
 
             const areaEntities = new Set();
+            const globalAreaEntities = this.entities.filter((entity) => (
+              GLOBAL_DEVICE_PAGE_DOMAINS.has(computeDomain(entity.entity_id))
+            ));
             //Loop throught all areas to get all entities assigned to an area to populate the data group
             for(const area of this.areas){
               if(!(this.configuration['areas'][area.area_id] && this.configuration['areas'][area.area_id]['disabled'])){
-                const areaDevices = new Set();
-
-                // Find all devices linked to this area
-                for (const device of this.devices) {
-                  if (device.area_id === area.area_id) {
-                    areaDevices.add(device.id);
-                  }
-                }
+                const areaDevices = new Set(
+                  (this.devicesByAreaId.get(area.area_id) || []).map((device) => device.id),
+                );
+                const candidateEntities = registryOrderedEntityUnion([
+                  this.entitiesByAreaId.get(area.area_id),
+                  globalAreaEntities.filter((entry) => !areaEntities.has(entry.entity_id)),
+                ], this.entityOrderById);
 
                 // Find all entities directly linked to this area
                 // or linked to a device linked to this area.
-                for (const entity of this.entities) {
+                for (const entity of candidateEntities) {
                   if (
                     entity.area_id
                       ? entity.area_id === area.area_id
@@ -238,8 +314,7 @@ function getDwainsHass() {
 
                       if(this.configuration.device_cards.length !== 0){
                         if(this.configuration.device_cards[domain]){
-                          await Promise.all(Object.entries(this.configuration.device_cards[domain]).map(async ([k,v]) => {
-                            const card = await this.createCardElement2(v);
+                          Object.entries(this.configuration.device_cards[domain]).forEach(([k,v]) => {
                             const rowSpan = v["row_span"] ? v["row_span"] : "1";
                             const colSpan = v["col_span"] ? v["col_span"] : "1";
                             const rowSpanLg = v["row_span_lg"] ? v["row_span_lg"] : "1";
@@ -248,8 +323,7 @@ function getDwainsHass() {
                             const colSpanXl = v["col_span_xl"] ? v["col_span_xl"] : "1";
 
                             if(v["position"] == 'bottom'){
-                              deviceCustomCardsBottom.push({
-                                card: card,
+                              deviceCustomCardsBottom.push(attachDeferredCard({
                                 filename: k,
                                 domain: domain,
                                 rowSpan: rowSpan,
@@ -258,10 +332,9 @@ function getDwainsHass() {
                                 colSpanLg: colSpanLg,
                                 rowSpanXl: rowSpanXl,
                                 colSpanXl: colSpanXl,
-                              });
+                              }, () => this.createCardElement2(v)));
                             } else {
-                              deviceCustomCardsTop.push({
-                                card: card,
+                              deviceCustomCardsTop.push(attachDeferredCard({
                                 filename: k,
                                 domain: domain,
                                 rowSpan: rowSpan,
@@ -270,9 +343,9 @@ function getDwainsHass() {
                                 colSpanLg: colSpanLg,
                                 rowSpanXl: rowSpanXl,
                                 colSpanXl: colSpanXl,
-                              });
+                              }, () => this.createCardElement2(v)));
                             }
-                          }));
+                          });
                         }
                       }
                       data[domain] = {
@@ -471,7 +544,7 @@ function getDwainsHass() {
 
                       areaEntities.add(entity.entity_id);
 
-                      data[domain].cards.push({
+                      data[domain].cards.push(attachDeferredCard({
                         area: area,
                         entity: entity.entity_id,
                         rowSpan: rowSpan,
@@ -483,12 +556,11 @@ function getDwainsHass() {
                         friendlyName: configuredFriendlyName,
                         hideEntity: hideEntity,
                         excludeEntity: excludeEntity,
-	                        card: this.createCardElement2(cardConfig),
                         customCard: customCard,
                         customPopup: customPopup,
                         sort_order: (this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['devices_sort_order'] ? this.configuration['entities'][entity.entity_id]['devices_sort_order']: 99),
                         grouped_sort_order: (this.configuration['entities'][entity.entity_id] && this.configuration['entities'][entity.entity_id]['devices_grouped_sort_order'] ? this.configuration['entities'][entity.entity_id]['devices_grouped_sort_order']: 99),
-                      });
+                      }, () => this.createCardElement2(cardConfig)));
                     }
                   }
                 }
@@ -503,14 +575,7 @@ function getDwainsHass() {
 	                return data[category]; // Convert array of categories to array of objects
 	              });
 
-	            await Promise.all(sortedData.flatMap((group) => group && group.cards || []).map(async (item) => {
-	              try {
-	                if(item) item.card = await item.card;
-	              } catch (_) {
-	                if(item) item.card = null;
-	              }
-	            }));
-
+                if (!isCurrent()) return;
             this.data = sortedData;
             this.disabledDevices = disabledDevices;
             this.startedUp = true;
@@ -522,71 +587,8 @@ function getDwainsHass() {
           }
         }
 
-        _average(data, domain, deviceClass) {
-          const entities = data[domain].filter((entity) =>
-            deviceClass ? entity.attributes.device_class === deviceClass : true
-          );
-          if (!entities) {
-            return undefined;
-          }
-          let uom;
-          const values = entities.filter((entity) => {
-            if (
-              !entity.attributes.unit_of_measurement ||
-              isNaN(Number(entity.state))
-            ) {
-              return false;
-            }
-            if (!uom) {
-              uom = entity.attributes.unit_of_measurement;
-              return true;
-            }
-            return entity.attributes.unit_of_measurement === uom;
-          });
-          if (!values.length) {
-            return undefined;
-          }
-          const sum = values.reduce(
-            (total, entity) => total + Number(entity.state),
-            0
-          );
-          return `${Math.round((sum / values.length)*10)/10}${uom}`;
-        }
-
-        _isOn(data, domain, deviceClass) {
-          const entities = data[domain];
-          if (!entities) {
-            return undefined;
-          }
-          return((
-            deviceClass
-              ? entities.filter(
-                  (entity) => entity.attributes.device_class === deviceClass
-                )
-              : entities
-          ).filter(
-            (entity) =>
-              !UNAVAILABLE_STATES.includes(entity.state) &&
-              !STATES_OFF.includes(entity.state)
-          ).length);
-        }
-
-        _climateState(data, domain){
-          const entities = data[domain];
-          if (!entities) {
-            return undefined;
-          }
-          const climateStates = [];
-          for(const climate of entities){
-            if(climate.attributes['hvac_action'] != 'idle'){
-              climateStates.push(climate.attributes['hvac_action']);
-            }
-          }
-          return climateStates.join(", ");
-        }
-
         _handleDeviceClick(event){
-          var id = event.currentTarget.dataset.device;
+          const id = event.currentTarget.dataset.device;
           window.location.hash = id;
           this.selectedDevice = id;
           window.scrollTo(0,0);
@@ -599,48 +601,6 @@ function getDwainsHass() {
           //this.selectedDevice = "woonkamer";
           //this.requestUpdate();
           this._update_hass(this._hass);
-        }
-
-        _entitiesByDomain(entities){
-          const entitiesByDomain = {};
-
-          for (const entity of entities) {
-
-              const domain = entity.substr(0, entity.indexOf("."));
-
-              if (
-                !TOGGLE_DOMAINS.includes(domain) &&
-                !SENSOR_DOMAINS.includes(domain) &&
-                !ALERT_DOMAINS.includes(domain) &&
-                !CLIMATE_DOMAINS.includes(domain) &&
-                !OTHER_DOMAINS.includes(domain)
-              ) {
-                //console.log(domain);
-                continue;
-              }
-
-              const stateObj = this._hass.states[entity];
-
-              if (!stateObj) {
-                continue;
-              }
-
-              if (
-                (SENSOR_DOMAINS.includes(domain) || ALERT_DOMAINS.includes(domain) || COVER_DOMAINS.includes(domain)) &&
-                !DEVICE_CLASSES[domain].includes(
-                  stateObj.attributes.device_class || ""
-                )
-              ) {
-                //console.log(domain);
-                continue;
-              }
-
-              if (!(domain in entitiesByDomain)) {
-                entitiesByDomain[domain] = [];
-              }
-              entitiesByDomain[domain].push(stateObj);
-          }
-          return entitiesByDomain;
         }
 
         async createCardElement(inputCards){
@@ -692,7 +652,7 @@ function getDwainsHass() {
         }
 
         _toggle(ev) {
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;
           if (TOGGLE_DOMAINS.includes(domain)) {
@@ -708,28 +668,29 @@ function getDwainsHass() {
         }
 
         _addLovelaceCard(ev) {
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;
           const position = ev.currentTarget.position;
 
-          window.setTimeout(() => {
-            fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
+          this._popupOpens.schedule(() => {
+            fireEvent("hass-more-info", {entityId: ""}, this);
             popUp(translateEngine(this._hass, 'device.add_card_to') + domain, {
               type: "custom:dwains-create-custom-card-card",
               domain: domain,
               position: position,
               page: "devices"
             }, true, '');
-          }, 50);
+          });
         }
 
         _handleEntityEditClick(ev) {
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const entity = ev.currentTarget.entity;
           const friendlyName = ev.currentTarget.friendlyName;
           const hideEntity = ev.currentTarget.hideEntity;
+          const hideEntityInArea = !!this.configuration?.entities?.[entity]?.hidden_in_area;
           const excludeEntity = ev.currentTarget.excludeEntity;
           const disableEntity = ev.currentTarget.disableEntity;
           const colSpan = ev.currentTarget.colSpan;
@@ -740,13 +701,14 @@ function getDwainsHass() {
           const rowSpanXl = ev.currentTarget.rowSpanXl;
           const customCard = ev.currentTarget.customCard;
           const customPopup = ev.currentTarget.customPopup;
-          window.setTimeout(() => {
-            fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
+          this._popupOpens.schedule(() => {
+            fireEvent("hass-more-info", {entityId: ""}, this);
             popUp(translateEngine(this._hass, 'entity.edit_entity'), {
               type: "custom:dwains-edit-entity-card",
               entity: entity,
               friendlyName: friendlyName,
               hideEntity: hideEntity,
+              hideEntityInArea: hideEntityInArea,
               excludeEntity: excludeEntity,
               disableEntity: disableEntity,
               colSpan: colSpan,
@@ -758,12 +720,12 @@ function getDwainsHass() {
               customCard: customCard,
               customPopup: customPopup,
             }, false, '');
-          }, 50);
+          });
         }
 
 
         _handleEntityEditCardClick(ev) {
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const entityId = ev.currentTarget.entity;
 
@@ -775,8 +737,8 @@ function getDwainsHass() {
             mode = "editor-element";
           }
 
-          window.setTimeout(() => {
-            fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
+          this._popupOpens.schedule(() => {
+            fireEvent("hass-more-info", {entityId: ""}, this);
             popUp(translateEngine(this._hass, 'entity.edit_entity_card'), {
               type: "custom:dwains-edit-entity-card-card",
               entity_id: entityId,
@@ -784,12 +746,11 @@ function getDwainsHass() {
               mode: mode,
               existingCardEdit: cardConfig ? true : false,
             }, true, '');
-          }, 50);
+          });
         }
 
         _handleEntityEditPopupClick(ev) {
-          window.__ddReloadReturnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}${this.selectedDevice ? `#${this.selectedDevice}` : window.location.hash}`;
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const entityId = ev.currentTarget.entity;
 
@@ -803,8 +764,8 @@ function getDwainsHass() {
 
           console.log(cardConfig);
 
-          window.setTimeout(() => {
-            fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
+          this._popupOpens.schedule(() => {
+            fireEvent("hass-more-info", {entityId: ""}, this);
             popUp(translateEngine(this._hass, 'entity.edit_entity_popup_card'), {
               type: "custom:dwains-edit-entity-popup-card",
               entity_id: entityId,
@@ -812,35 +773,31 @@ function getDwainsHass() {
               mode: mode,
               existingCardEdit: cardConfig ? true : false,
             }, true, '');
-          }, 50);
+          });
         }
 
         _handleDeviceEditClick(ev) {
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const device = ev.currentTarget.device;
           const icon = ev.currentTarget.device_icon;
           const showInNavbar = ev.currentTarget.showInNavbar;
-          window.setTimeout(() => {
-            fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
+          this._popupOpens.schedule(() => {
+            fireEvent("hass-more-info", {entityId: ""}, this);
             popUp(translateEngine(this._hass, 'device.edit_device_button'), {
               type: "custom:dwains-edit-device-button-card",
               device: device,
               icon: icon,
               showInNavbar: showInNavbar,
             }, false, '');
-          }, 50);
+          });
         }
 
         _handleCustomCardEditClick(ev){
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;
           const filename = ev.currentTarget.filename;
-
-          const loader = document.createElement("hui-masonry-view");
-          loader.lovelace = { editMode: true };
-          loader.willUpdate(new Map());
 
           const colSpan = ev.currentTarget.colSpan;
           const rowSpan = ev.currentTarget.rowSpan;
@@ -850,7 +807,7 @@ function getDwainsHass() {
           const rowSpanXl = ev.currentTarget.rowSpanXl;
 
           const cardConfig = this.configuration.device_cards[domain][filename];
-          var position = "top";
+          let position = "top";
           if(cardConfig["position"]){
             //Config has the DD position key, but editor doesnt understand that so remove it and parse it to editor
             position = cardConfig["position"];
@@ -864,8 +821,8 @@ function getDwainsHass() {
           delete cardConfig["col_span_xl"];
           delete cardConfig["row_span_xl"];
 
-          window.setTimeout(() => {
-            fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
+          this._popupOpens.schedule(() => {
+            fireEvent("hass-more-info", {entityId: ""}, this);
             popUp(this._hass.localize("ui.components.entity.entity-picker.edit"), {
               type: "custom:dwains-create-custom-card-card",
               domain: domain,
@@ -881,39 +838,42 @@ function getDwainsHass() {
               colSpanXl: colSpanXl,
               rowSpanXl: rowSpanXl,
               }, true, '');
-          }, 50);
+          });
         }
 
-        _handleEntityEditBoolValueClick(ev) {
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
-          ev.stopPropagation();
-          const entityId = ev.currentTarget.entity;
-          const key = ev.currentTarget.key;
-          const value = ev.currentTarget.value;
-
-          this._hass.connection.sendMessagePromise({
+        _saveEntityBoolValue(entityId, key, value) {
+          return this._hass.callWS({
             type: 'dwains_dashboard/edit_entity_bool_value',
-            entityId: entityId,
-            key: key,
-            value: value,
-          }).then(
-              (resp) => {
-                  console.log(resp);
-              },
-              (err) => {
-                  console.error('Message failed!', err);
-              }
+            entityId,
+            key,
+            value,
+          }).catch((err) => {
+            console.error('Failed to update entity setting:', err);
+          });
+        }
+        _handleEntityEditBoolValueClick(ev) {
+          closeParentDropdown(ev);
+          ev.stopPropagation();
+          this._saveEntityBoolValue(
+            ev.currentTarget.entity,
+            ev.currentTarget.key,
+            ev.currentTarget.value,
           );
+        }
+        _handleEntityAreaVisibilityClick(ev, entityId, value) {
+          closeParentDropdown(ev);
+          ev.stopPropagation();
+          this._saveEntityBoolValue(entityId, 'hidden_in_area', value);
         }
 
         _handleDeviceEditBoolValueClick(ev) {
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const device = ev.currentTarget.device;
           const key = ev.currentTarget.key;
           const value = ev.currentTarget.value;
 
-          this._hass.connection.sendMessagePromise({
+          this._hass.callWS({
             type: 'dwains_dashboard/edit_device_bool_value',
             device: device,
             key: key,
@@ -929,7 +889,7 @@ function getDwainsHass() {
         }
 
         _handleDeviceEditCardClick(ev) {
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;
 
@@ -939,12 +899,8 @@ function getDwainsHass() {
             mode = 'current-selected-blueprint';
           }
 
-          const loader = document.createElement("hui-masonry-view");
-          loader.lovelace = { editMode: true };
-          loader.willUpdate(new Map());
-
-          window.setTimeout(() => {
-            fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
+          this._popupOpens.schedule(() => {
+            fireEvent("hass-more-info", {entityId: ""}, this);
             popUp(translateEngine(this._hass, 'device.edit_device_card')+translateEngine(this._hass, 'device.'+domain), {
               type: "custom:dwains-edit-device-card-card",
               domain: domain,
@@ -952,12 +908,11 @@ function getDwainsHass() {
               existingCardEdit: cardConfig ? true : false,
               mode: mode,
             }, true, '');
-          }, 50);
+          });
         }
 
         _handleDeviceEditPopupClick(ev) {
-          window.__ddReloadReturnUrl = `${window.location.origin}${window.location.pathname}${window.location.search}${this.selectedDevice ? `#${this.selectedDevice}` : window.location.hash}`;
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const domain = ev.currentTarget.domain;
 
@@ -967,8 +922,8 @@ function getDwainsHass() {
             mode = 'current-selected-blueprint';
           }
 
-          window.setTimeout(() => {
-            fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
+          this._popupOpens.schedule(() => {
+            fireEvent("hass-more-info", {entityId: ""}, this);
             popUp(translateEngine(this._hass, 'device.edit_device_popup')+translateEngine(this._hass, 'device.'+domain), {
               type: "custom:dwains-edit-device-popup-card",
               domain: domain,
@@ -976,7 +931,7 @@ function getDwainsHass() {
               existingCardEdit: cardConfig ? true : false,
               mode: mode,
             }, true, '');
-          }, 50);
+          });
         }
 
 
@@ -985,7 +940,7 @@ function getDwainsHass() {
          * @param {evt} evt
          */
         _deviceButtonMoved(evt){
-          this._hass.connection.sendMessagePromise({
+          this._hass.callWS({
             type: 'dwains_dashboard/sort_device_button',
             sortData: JSON.stringify(this._sortable.toArray()),
           }).then(
@@ -998,7 +953,7 @@ function getDwainsHass() {
           );
         }
         _handleDeviceEditModeClicked(ev){
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const value = ev.currentTarget.value;
 
@@ -1020,14 +975,15 @@ function getDwainsHass() {
         }
 
         _handleDeviceViewEditModeClicked(ev){
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const value = ev.currentTarget.value;
 
           if(value){
             this._sortable = [];
             const sortableElements = this.shadowRoot.querySelectorAll('.sortable');
-            for(var i=0; i<sortableElements.length; i++){
+            const cardHass = this._hass;
+            for(let i=0; i<sortableElements.length; i++){
               const sortType = (this.deviceViewDisplayGrouped ? 'devices_grouped_sort_order' : 'devices_sort_order');
               this._sortable[i] = new Sortable(sortableElements[i], {
                   forceFallback: true,
@@ -1035,7 +991,7 @@ function getDwainsHass() {
                   dataIdAttr: "data-entity",
                   handle: '.sortable-move',
                   onEnd: function(event){
-                    hass().connection.sendMessagePromise({
+                    cardHass.callWS({
                         type: 'dwains_dashboard/sort_entity',
                         sortData: JSON.stringify(this.toArray()),
                         sortType: sortType
@@ -1264,6 +1220,28 @@ function getDwainsHass() {
             `;
           }
         }
+        _renderEntityAreaVisibilityAction(entity) {
+          const hiddenInArea = this.configuration?.entities?.[entity]?.hidden_in_area === true;
+          return html`
+            <ha-list-item
+              graphic="icon"
+              @click=${(ev) => this._handleEntityAreaVisibilityClick(
+                ev,
+                entity,
+                !hiddenInArea,
+              )}
+            >
+              <div slot="graphic">
+                <ha-icon .icon=${hiddenInArea ? "mdi:eye" : "mdi:eye-off"}></ha-icon>
+              </div>
+              ${translateEngine(
+                this._hass,
+                hiddenInArea ? 'entity.unhide_in_area' : 'entity.hide_in_area',
+              )}
+            </ha-list-item>
+          `;
+        }
+
         _renderDeviceViewCard(data){
           return html`
           <div
@@ -1272,7 +1250,7 @@ function getDwainsHass() {
           >
 	            <div>
 	              <span class="hidden">${translateEngine(this._hass, 'device.'+data.domain)}<br></span>
-	              <dd-lazy-card .card=${data.card} .eager=${true}></dd-lazy-card>
+	              <dd-lazy-card .card=${data.card} .cardFactory=${data.cardFactory} .hass=${this._hass}></dd-lazy-card>
 	            </div>
             ${this.deviceViewEditMode ? html`
             <ha-card>
@@ -1363,6 +1341,7 @@ function getDwainsHass() {
                       </div>
                       ${translateEngine(this._hass, 'entity.hide')}
                     </ha-list-item>
+                    ${this._renderEntityAreaVisibilityAction(data.entity)}
                     <ha-list-item
                       graphic="icon"
                       .entity="${data.entity}"
@@ -1397,7 +1376,7 @@ function getDwainsHass() {
           return html`
 	          <div class="col-span-${data.colSpan} row-span-${data.rowSpan} lg-col-span-${data.colSpanLg} lg-row-span-${data.rowSpanLg} xl-col-span-${data.colSpanXl} xl-row-span-${data.rowSpanXl} relative">
 	            <div>
-	              <dd-lazy-card .card=${data.card} .eager=${true}></dd-lazy-card>
+	              <dd-lazy-card .card=${data.card} .cardFactory=${data.cardFactory} .hass=${this._hass}></dd-lazy-card>
 	            </div>
             ${this.deviceViewEditMode ? html`
             <ha-card>
@@ -1423,7 +1402,7 @@ function getDwainsHass() {
 
 
         _handleDeviceViewDisplayGroupedClicked(ev){
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
 
           const value = ev.currentTarget.value;
@@ -1475,8 +1454,8 @@ function getDwainsHass() {
 
             return html`
               <div class="w-full mb-12 ${visible}" id="${data.domain}">
-                <div class="flex justify-between">
-                  <div>
+                <div class="dd-detail-view-header flex justify-between">
+                  <div class="dd-detail-view-title">
                     <h2 class="font-semibold text-lg capitalize">
                       ${translateEngine(this._hass, 'device.'+data.domain)}
                     </h2>
@@ -1679,7 +1658,7 @@ function getDwainsHass() {
                         </div>
                       </div>
 
-                      <div class="grid grid-cols-2 md-grid-cols-3 ${this.configuration['homepage_header']['v2_mode'] ? "lg-grid-cols-4 xl-grid-cols-5" : ""} gap-4" id="sortable">
+                      <div class="grid grid-cols-2 dd-overview-grid md-grid-cols-3 ${this.configuration['homepage_header']['v2_mode'] ? "lg-grid-cols-4 xl-grid-cols-5" : ""} gap-4" id="sortable">
                         ${Object.values(this.data).map((i) => this._renderDeviceButton(i))}
                       </div>
 
@@ -1716,6 +1695,29 @@ function getDwainsHass() {
 
       static get styles() {
         return [css`
+            :host {
+              display: block;
+              box-sizing: border-box;
+              width: 100%;
+              min-width: 0;
+              max-width: 100%;
+            }
+            .dd-overview-grid {
+              box-sizing: border-box;
+              width: 100%;
+              min-width: 0;
+              max-width: 100%;
+            }
+            @media (max-width: 599px) {
+              .w-full {
+                box-sizing: border-box;
+                max-width: 100%;
+              }
+              .grid.dd-overview-grid > * {
+                min-width: 0;
+                max-width: 100%;
+              }
+            }
             .card-actions {
               text-align: right;
             }
@@ -2102,9 +2104,9 @@ function getDwainsHass() {
                 grid-template-columns: repeat(5, minmax(0, 1fr))
               }
           }
-          `, subtleBackButtonStyles(css), subtleDevicesPageStyles(css)]
+          `, subtleBackButtonStyles(css), subtleDevicesPageStyles(css), subtleDetailViewStyles(css)]
         }
 
 
       }
-      customElements.define("devices-card", DevicesCard);
+      defineDwainsElement("devices-card", DevicesCard);

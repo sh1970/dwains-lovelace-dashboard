@@ -1,18 +1,42 @@
-import { hass } from "card-tools/src/hass";
-import { css, html, LitElement } from 'lit-element';
+import { hass } from "./hass-compat";
+import { css, html, LitElement } from 'lit';
 import {
   SUPPORTED_CARDS_WITH_ENTITY
  } from './variables'
 import translateEngine from './translate-engine';
 import { closePopup } from "./helpers";
+const { websocketReadStore } = require('./websocket-read-store');
+const { ConnectedLoadOwner } = require('./connected-load-owner');
+const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
+const { defineDwainsElement } = require('./custom-element-registration');
 
-const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
-Promise.race(bases2).then(async () => {
-  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
+class DwainsEditEntityPopupCard extends LitElement {
+    constructor() {
+      super();
+      this._connectedLoadOwner = new ConnectedLoadOwner(
+        (context) => this._loadEditor(context),
+        {
+          reportError: (message, error) => console.error(message, error),
+          errorMessage: "Failed to load entity-popup editor data",
+        },
+      );
+      this._configReady = false;
+    }
 
+    set hass(hass) {
+      const connectionChanged = hasHassConnectionChanged(this._hass, hass);
+      this._hass = hass;
+      if (connectionChanged) {
+        this._connectedLoadOwner.disconnect();
+        if (this.isConnected) this._connectedLoadOwner.connect();
+      }
+      this._startEditorIfReady();
+    }
 
+    get hass() {
+      return this._hass;
+    }
 
-  class DwainsEditEntityPopupCard extends LitElement {
     static get styles() {
       return [
         css`
@@ -181,7 +205,7 @@ Promise.race(bases2).then(async () => {
       }
     }
     setConfig(config) {
-      this.hass = hass();
+      if (!this.hass) this.hass = hass();
       this.mode = config.mode ? config.mode : 'pre-select'; //Set default mode to hui-card-picker
       this.entity_id = config.entity_id;
       if(config.cardConfig){
@@ -193,26 +217,37 @@ Promise.race(bases2).then(async () => {
         this.cardConfig = "";
       }
       this.existingCardEdit = config.existingCardEdit ? config.existingCardEdit : false;
-
-      const loader = document.createElement("hui-masonry-view");
-      loader.lovelace = { editMode: true };
-      loader.willUpdate(new Map());
+      this._configReady = true;
+      this._startEditorIfReady();
     }
-    async connectedCallback(){
+    connectedCallback(){
       super.connectedCallback();
-
-      await this._loadBlueprints();
-
-      const ch = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
-      const c = await ch.createCardElement({ type: "button" });
-      await c.constructor.getConfigElement();
+      this._connectedLoadOwner.connect();
+      this._startEditorIfReady();
     }
 
-    async _loadBlueprints(){
-      //Load blueprints
-      this.blueprints = await this.hass.callWS({
+    disconnectedCallback(){
+      super.disconnectedCallback();
+      this._connectedLoadOwner.disconnect();
+    }
+
+    _startEditorIfReady() {
+      if (!this._configReady || !this._hass) return;
+      this._connectedLoadOwner.ready();
+    }
+
+    async _loadEditor({ isCurrent }) {
+      const hass = this._hass;
+      const connection = hassConnectionIdentity(hass);
+      const blueprints = await websocketReadStore.read(hass, {
         type: 'dwains_dashboard/get_blueprints'
       });
+      if (!isCurrent() || hassConnectionIdentity(this._hass) !== connection) return;
+      this.blueprints = blueprints;
+    }
+
+    _loadBlueprints() {
+      return this._connectedLoadOwner.reload();
     }
 
     magicStuff(ev) {
@@ -234,7 +269,7 @@ Promise.race(bases2).then(async () => {
       const cardData = JSON.stringify(this.cardConfig);
       //console.log(cardData);
       //Here parse it with websocket to my integration?
-      this.hass.connection.sendMessagePromise({
+      this.hass.callWS({
         type: 'dwains_dashboard/edit_entity_popup',
         cardData: cardData,
         entityId: this.entity_id,
@@ -254,7 +289,7 @@ Promise.race(bases2).then(async () => {
       this.requestUpdate();
     }
     _removeCard(){
-      this.hass.connection.sendMessagePromise({
+      this.hass.callWS({
         type: 'dwains_dashboard/remove_entity_popup',
         entityId: this.entity_id,
       }).then(
@@ -269,12 +304,13 @@ Promise.race(bases2).then(async () => {
     }
     _handleDeleteBlueprintClicked(ev){
       const blueprint = ev.currentTarget.blueprint;
-      this.hass.connection.sendMessagePromise({
+      this.hass.callWS({
         type: 'dwains_dashboard/delete_blueprint',
         blueprint: blueprint
       }).then(
           (resp) => {
             console.log(resp);
+            websocketReadStore.invalidate(this.hass);
             this._loadBlueprints();
             this.requestUpdate();
           },
@@ -300,7 +336,7 @@ Promise.race(bases2).then(async () => {
       this.installBlueprintYaml = e.target.value;
     }
     _handleInstallBlueprintClicked(ev) {
-      this.hass.connection.sendMessagePromise({
+      this.hass.callWS({
         type: 'dwains_dashboard/install_blueprint',
         yamlCode: JSON.stringify(this.installBlueprintYaml),
       }).then(
@@ -308,6 +344,7 @@ Promise.race(bases2).then(async () => {
             console.log(resp);
             if(resp["succesfull"]){
               alert(this.hass.localize("ui.common.successfully_saved"));
+              websocketReadStore.invalidate(this.hass);
               this._loadBlueprints();
               this.requestUpdate();
             } else {
@@ -457,11 +494,11 @@ Promise.race(bases2).then(async () => {
         return html`
           <div class="edit-element">
             <h1 style="font-size: 17px; font-weight: bold;">Select the popup card you want to use for ${this.entity_id}</h1>
-            <hui-card-picker
+            <dwains-card-picker
               @config-changed=${this.magicStuff}
               .hass=${this.hass}
               .lovelace=${{views: []}}
-            ></hui-card-picker>
+            ></dwains-card-picker>
             <div class="card-footer">
               <ha-button slot="secondaryAction" @click=${(e) => closePopup()}>
                 ${this.hass.localize("ui.common.cancel")}
@@ -472,17 +509,17 @@ Promise.race(bases2).then(async () => {
       } else {
         return html`
           <div class="edit-element">
-            <hui-card-element-editor
+            <dwains-card-config-editor
               @save-config=${this.magicStuffSecond}
               @config-changed=${this.magicStuff}
               .value=${this.cardConfig}
               .hass=${this.hass}
-              lovelace=${{views: []}}
-            ></hui-card-element-editor>
-            <hui-card-preview
+              .lovelace=${{views: []}}
+            ></dwains-card-config-editor>
+            <dwains-card-preview
               .hass=${this.hass}
               .config=${this.cardConfig}
-            ></hui-card-preview>
+            ></dwains-card-preview>
             <div class="card-footer-multiple">
               ${
                 this.existingCardEdit ? html `
@@ -505,6 +542,5 @@ Promise.race(bases2).then(async () => {
         `;
       }
     }
-  }
-  customElements.define("dwains-edit-entity-popup-card", DwainsEditEntityPopupCard);
-});
+}
+defineDwainsElement("dwains-edit-entity-popup-card", DwainsEditEntityPopupCard);

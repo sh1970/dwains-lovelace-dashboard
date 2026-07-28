@@ -1,4 +1,5 @@
 import { LitElement, html, css } from 'lit';
+const { defineDwainsElement } = require('./custom-element-registration');
 //Herschreven
 class DwainsHeadingCard extends LitElement {
   static get properties() {
@@ -37,8 +38,6 @@ class DwainsHeadingCard extends LitElement {
   }
 }
 
-customElements.whenDefined('hui-masonry-view').then(() => {
-  if (!customElements.get('dwains-heading-card')) {
-    customElements.define('dwains-heading-card', DwainsHeadingCard);
-  }
-});
+if (!customElements.get('dwains-heading-card')) {
+  defineDwainsElement('dwains-heading-card', DwainsHeadingCard);
+}

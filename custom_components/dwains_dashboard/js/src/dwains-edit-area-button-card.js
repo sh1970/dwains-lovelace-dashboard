@@ -1,17 +1,11 @@
-import { hass } from "card-tools/src/hass";
-import { css, html, LitElement } from 'lit-element';
+import { hass } from "./hass-compat";
+import { css, html, LitElement } from 'lit';
 import translateEngine from './translate-engine';
 import { closePopup } from "./helpers";
+const { closeParentDropdown } = require('./dropdown-controller');
+const { defineDwainsElement } = require('./custom-element-registration');
 
-const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
-Promise.race(bases2).then(async () => {
-  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
-
-
-
-
-
-  class DwainsEditAreaButtonCard extends LitElement {
+class DwainsEditAreaButtonCard extends LitElement {
     static get styles() {
       return [
         css`
@@ -53,34 +47,15 @@ Promise.race(bases2).then(async () => {
       ]
     }
     setConfig(config) {
-      this.hass = hass();
+      if (!this.hass) this.hass = hass();
       this.areaId = config.areaId;
       this.icon = config.icon ? config.icon : "";
       this.disableArea = config.disableArea ? config.disableArea : false;
       this.hideIcon = config.hideIcon ? config.hideIcon : false;
     }
-    async connectedCallback(){
+    connectedCallback(){
       //console.log('connectedCallBack');
       super.connectedCallback();
-
-      // //loadHaYamlEditor Start
-      //   if (customElements.get("ha-yaml-editor")) return;
-
-      //   // Load in ha-yaml-editor from developer-tools-service
-      //   const ppResolver = document.createElement("partial-panel-resolver");
-      //   const routes = (ppResolver).getRoutes([
-      //     {
-      //       component_name: "developer-tools",
-      //       url_path: "a",
-      //     },
-      //   ]);
-      //   await routes.routes.a.load();
-      //   const devToolsRouter = document.createElement("developer-tools-router");
-      //   await (devToolsRouter).routerOptions.routes.service.load();
-      // //loadHaYamlEditor End
-      const ch = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
-      const c = await ch.createCardElement({ type: "button" });
-      await c.constructor.getConfigElement();
     }
     _iconPickerChange(ev){
       this.icon = ev.detail['value'];
@@ -93,9 +68,9 @@ Promise.race(bases2).then(async () => {
       this.requestUpdate();
     }
     _saveButton(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
-      this.hass.connection.sendMessagePromise({
+      this.hass.callWS({
         type: 'dwains_dashboard/edit_area_button',
         icon: this.icon,
         areaId: this.areaId,
@@ -146,6 +121,5 @@ Promise.race(bases2).then(async () => {
       </div>
       `;
     }
-  }
-  customElements.define("dwains-edit-area-button-card", DwainsEditAreaButtonCard);
-});
+}
+defineDwainsElement("dwains-edit-area-button-card", DwainsEditAreaButtonCard);

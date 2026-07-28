@@ -1,16 +1,9 @@
 import { createCardElementSafe } from './helpers';
+import { LitElement, html, css } from 'lit';
+const { loadCardHelpers } = require('./card-helpers-loader');
+const { defineDwainsElement } = require('./custom-element-registration');
 
-const bases = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
-Promise.race(bases).then(async () => {
-  await new Promise(resolve => setTimeout(resolve, 0));
-  const LitElement = customElements.get('hui-masonry-view')
-    ? Object.getPrototypeOf(customElements.get('hui-masonry-view'))
-    : Object.getPrototypeOf(customElements.get('hc-lovelace'));
-
-  const html = LitElement.prototype.html;
-
-  const css = LitElement.prototype.css;
-
+const cardHelpersReady = loadCardHelpers();
 
   const createError = (error, config) => {
     return createThing("hui-error-card", {
@@ -21,9 +14,8 @@ Promise.race(bases).then(async () => {
   };
 
 
-  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
-
   const createThing = async (tag, config) => {
+    const cardHelpers = await cardHelpersReady;
     if (cardHelpers) {
       const cardElement = createCardElementSafe(cardHelpers, config);
       return cardElement;
@@ -44,6 +36,7 @@ Promise.race(bases).then(async () => {
   class DwainsFlexboxCard extends LitElement {
     constructor() {
       super();
+      this._renderGeneration = 0;
     }
 
     static get properties() {
@@ -67,12 +60,9 @@ Promise.race(bases).then(async () => {
 
 
     setConfig(config) {
-      if (
-        !config &&
-        ((!config.cards && !Array.isArray(config.cards)) ||
-          !config.entities ||
-          !Array.isArray(config.entities))
-      ) {
+      const hasCards = Array.isArray(config?.cards);
+      const hasEntities = Array.isArray(config?.entities);
+      if (!hasCards && !hasEntities) {
         throw new Error("Card config incorrect");
       }
 
@@ -86,11 +76,21 @@ Promise.race(bases).then(async () => {
 
     renderCard() {
       const config = this._config.entities || this._config.cards;
+      const renderGeneration = ++this._renderGeneration;
 
       const promises = config.map((config) => this.createCardElement(config));
       Promise.all(promises).then((cards) => {
-        this._refCards = cards;
+        if (renderGeneration === this._renderGeneration) {
+          this._refCards = cards;
+        }
+      }).catch((error) => {
+        console.error("Failed to render dwains-flexbox-card children", error);
       });
+    }
+
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this._renderGeneration += 1;
     }
 
     async createCardElement(cardConfig) {
@@ -99,7 +99,7 @@ Promise.race(bases).then(async () => {
       if (tag.startsWith("divider")) {
         tag = `hui-divider-row`;
       } else if (tag.startsWith("custom:")) {
-        tag = tag.substr("custom:".length);
+        tag = tag.slice("custom:".length);
       } else {
         tag = `hui-${tag}-card`;
       }
@@ -122,9 +122,7 @@ Promise.race(bases).then(async () => {
         "ll-rebuild",
         (ev) => {
           ev.stopPropagation();
-          this.createCardElement(cardConfig).then(() => {
-            this.renderCard();
-          });
+          this.renderCard();
         },
         { once: true }
       );
@@ -137,7 +135,7 @@ Promise.race(bases).then(async () => {
         return html``;
       }
 
-      var padding;
+      let padding;
       if (this._config.padding) {
         padding = "padding";
       }
@@ -1156,6 +1154,5 @@ Promise.race(bases).then(async () => {
   }
 
   if (!customElements.get("dwains-flexbox-card")) {
-    customElements.define("dwains-flexbox-card", DwainsFlexboxCard);
+    defineDwainsElement("dwains-flexbox-card", DwainsFlexboxCard);
   }
-});

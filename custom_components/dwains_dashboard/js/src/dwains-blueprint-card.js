@@ -1,12 +1,13 @@
-import { hass } from "card-tools/src/hass";
-import { css, html, LitElement } from 'lit-element';
+import { hass } from "./hass-compat";
+import { css, html, LitElement } from 'lit';
 import { createCardElementSafe, resolveEntityName } from './helpers';
+const { loadCardHelpers } = require('./card-helpers-loader');
+const { websocketReadStore } = require('./websocket-read-store');
+const { defineDwainsElement } = require('./custom-element-registration');
 
-const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
-Promise.race(bases2).then(async () => {
-  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
+const cardHelpers = loadCardHelpers();
 
-    class DwainsBlueprintCard extends LitElement {
+class DwainsBlueprintCard extends LitElement {
         static get properties() {
           return {
             card: {},
@@ -22,12 +23,15 @@ Promise.race(bases2).then(async () => {
          * @param {any} hass
          */
         set hass(hass) {
+          this._hass = hass;
           if(this.card == null || this.card.length === 0) return;
           this.card.hass = hass;
         }
 
         async setConfig(config) {
-          this._hass = hass();
+          const generation = (this._configGeneration || 0) + 1;
+          this._configGeneration = generation;
+          if (!this._hass) this._hass = hass();
 
           const data = config.data;
           const input_entity = config.input_entity ? config.input_entity : "Error";
@@ -59,12 +63,19 @@ Promise.race(bases2).then(async () => {
           });
           const cardParsedWithBooleans = cardParsed.replaceAll('"false"', 'false').replaceAll('"true"', 'true');
 
-          this.card = await this.createCardElement2(JSON.parse(cardParsedWithBooleans));
+          const card = await this.createCardElement2(JSON.parse(cardParsedWithBooleans));
+          if (generation !== this._configGeneration) return;
+          this.card = card;
+        }
+
+        disconnectedCallback() {
+          super.disconnectedCallback();
+          this._configGeneration = (this._configGeneration || 0) + 1;
         }
 
         async createCardElement2(config){
           const cardHelper = await cardHelpers;
-          return createCardElementSafe(cardHelper, config, hass());
+          return createCardElementSafe(cardHelper, config, this._hass);
         }
 
         render() {
@@ -78,7 +89,7 @@ Promise.race(bases2).then(async () => {
           `
         }
       }
-      customElements.define("dwains-blueprint-card", DwainsBlueprintCard);
+      defineDwainsElement("dwains-blueprint-card", DwainsBlueprintCard);
 
       class DwainsBlueprintCardEditor extends LitElement {
         static get styles() {
@@ -100,22 +111,26 @@ Promise.race(bases2).then(async () => {
           }
         }
 
-        async connectedCallback(){
+        connectedCallback(){
           super.connectedCallback();
-
-          await this._loadBlueprints();
+          this._loadBlueprintsIfReady();
+        }
+        _loadBlueprintsIfReady(){
+          if (!this.isConnected || !this.hass || !this._config) return;
+          this._loadBlueprints().catch((error) => {
+            console.error("Failed to load blueprint editor data", error);
+          });
         }
         async _loadBlueprints(){
           //Load blueprints
-          this.blueprints = await this.hass.callWS({
+          this.blueprints = await websocketReadStore.read(this.hass, {
             type: 'dwains_dashboard/get_blueprints'
           });
-          if(this.blueprints != null || this.blueprints.length != 0 ){
-            const blueprint = this.blueprints["blueprints"][this._config.blueprint];
-            if(blueprint){
+          const blueprint = this.blueprints?.blueprints?.[this._config.blueprint];
+          if(blueprint){
               this.blueprint = blueprint;
-              if(blueprint["blueprint"]["input"]){
-                this.inputs = blueprint["blueprint"]["input"];
+              if(blueprint.blueprint?.input){
+                this.inputs = blueprint.blueprint.input;
                 if(!this._config.data || this._config.data.length === 0){
                   const data = {};
                   Object.entries(this.inputs).map(([k,v]) => data[k] = k)
@@ -131,13 +146,13 @@ Promise.race(bases2).then(async () => {
               });
               event.detail = {config: this._config};
               this.dispatchEvent(event);
-            }
           }
         }
 
         setConfig(config) {
           this._config = config;
-          this.hass = hass();
+          if (!this.hass) this.hass = hass();
+          this._loadBlueprintsIfReady();
         }
 
         _inputChanged(ev) {
@@ -253,7 +268,7 @@ Promise.race(bases2).then(async () => {
         }
       }
 
-      customElements.define("dwains-blueprint-card-editor", DwainsBlueprintCardEditor);
+defineDwainsElement("dwains-blueprint-card-editor", DwainsBlueprintCardEditor);
       // window.customCards = window.customCards || [];
       // window.customCards.push({
       //   type: "dwains-blueprint-card",
@@ -261,4 +276,3 @@ Promise.race(bases2).then(async () => {
       //   preview: false, // Optional - defaults to false
       //   description: "Wrapper card for Dwains Dashboard Blueprint." // Optional
       // });
-});

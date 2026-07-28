@@ -1,4 +1,4 @@
-import { css, html, LitElement } from 'lit-element';
+import { css, html, LitElement } from 'lit';
 import { closePopup, createCardElementSafe, resolveEntityName } from "./helpers";
 import translateEngine from './translate-engine';
 import {
@@ -7,7 +7,12 @@ import {
 } from './variables'
 import {
     computeDomain
-} from 'custom-card-helpers';
+} from './frontend-helpers';
+const { websocketReadStore } = require('./websocket-read-store');
+const { loadCardHelpers } = require('./card-helpers-loader');
+const { TimerOwner } = require('./timer-owner');
+const { dashboardRouteState } = require('./dashboard-route-state');
+const { defineDwainsElement } = require('./custom-element-registration');
 
 class DwainsHouseInformationMoreInfoCard extends LitElement {
     static get styles() {
@@ -131,9 +136,24 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
     constructor() {
         super();
         this.areas = {};
-        this._debounceTimer = null;
+        this._timers = new TimerOwner();
         this._loadGeneration = 0;
+        this._lifecycleActive = false;
 
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._lifecycleActive = true;
+        this._timers.connect();
+        this._debounceLoadCards();
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this._lifecycleActive = false;
+        this._loadGeneration += 1;
+        this._timers.disconnect();
     }
 
     set hass(hass) {
@@ -150,25 +170,16 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
         // but do not add a visible delay when opening the popup.
         const debouncePeriod = 0;
 
-        // Reset bestaande timer
-        if (this._debounceTimer) {
-            clearTimeout(this._debounceTimer);
-        }
-
-        // Stel een nieuwe timer in
-        this._debounceTimer = setTimeout(async () => {
+        this._timers.schedule('load-cards', async () => {
             await this.loadCards();
-            this.requestUpdate();
+            if (this._lifecycleActive) {
+                this.requestUpdate();
+            }
         }, debouncePeriod);
     }
 
     async _loadCardHelpers() {
-        let cardHelpers = window.__dd_house_information_card_helpers;
-        cardHelpers = cardHelpers ? await cardHelpers : undefined;
-        if (!cardHelpers && typeof window.loadCardHelpers === 'function') {
-            cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
-        }
-        return cardHelpers;
+        return loadCardHelpers();
     }
 
     async setConfig(config) {
@@ -191,7 +202,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
         const loadGeneration = ++this._loadGeneration;
 
         if (!this.configuration) {
-            this.configuration = await this._hass.callWS({
+            this.configuration = await websocketReadStore.read(this._hass, {
                 type: 'dwains_dashboard/configuration/get'
             });
         }
@@ -276,7 +287,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
 
     async createEntityCard(entityId, friendlyName) {
         const stateObj = this._hass.states[entityId];
-        const domain = entityId.substr(0, entityId.indexOf("."));
+        const domain = entityId.slice(0, entityId.indexOf("."));
         if (!stateObj) return null;
 	    const displayName = friendlyName || resolveEntityName(
 	        this._hass,
@@ -374,14 +385,7 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
         const domain = ev.currentTarget.domain;
 
         closePopup();
-
-        let e;
-        let path = window.location.pathname;
-        let nav_path = path.substring(0, path.lastIndexOf('/')) + "/devices#" + domain;
-        window.history.pushState(null, '', nav_path);
-        e = new Event('location-changed', { composed: true });
-        e.detail = { replace: false };
-        window.dispatchEvent(e);
+        dashboardRouteState.navigateToDevices(domain);
     }
 
     _currentOn() {
@@ -507,4 +511,4 @@ class DwainsHouseInformationMoreInfoCard extends LitElement {
     // Helper functies zoals _handleMoreInfo, etc.
 }
 
-customElements.define("dwains-house-information-more-info-card", DwainsHouseInformationMoreInfoCard);
+defineDwainsElement("dwains-house-information-more-info-card", DwainsHouseInformationMoreInfoCard);

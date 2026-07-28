@@ -1,13 +1,40 @@
-import { hass } from "card-tools/src/hass";
-import { css, html, LitElement } from 'lit-element';
+import { hass } from "./hass-compat";
+import { css, html, LitElement } from 'lit';
 import translateEngine from './translate-engine';
 import { closePopup } from "./helpers";
+const { readSelectEvent } = require('./select-event-value');
+const { websocketReadStore } = require('./websocket-read-store');
+const { ConnectedLoadOwner } = require('./connected-load-owner');
+const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
+const { defineDwainsElement } = require('./custom-element-registration');
 
-const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
-Promise.race(bases2).then(async () => {
-  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
+class DwainsCreateCustomCardCard extends LitElement {
+    constructor() {
+      super();
+      this._connectedLoadOwner = new ConnectedLoadOwner(
+        (context) => this._loadEditor(context),
+        {
+          reportError: (message, error) => console.error(message, error),
+          errorMessage: "Failed to load custom-card editor data",
+        },
+      );
+      this._configReady = false;
+    }
 
-  class DwainsCreateCustomCardCard extends LitElement {
+    set hass(hass) {
+      const connectionChanged = hasHassConnectionChanged(this._hass, hass);
+      this._hass = hass;
+      if (connectionChanged) {
+        this._connectedLoadOwner.disconnect();
+        if (this.isConnected) this._connectedLoadOwner.connect();
+      }
+      this._startEditorIfReady();
+    }
+
+    get hass() {
+      return this._hass;
+    }
+
     static get styles() {
       return [
         css`
@@ -176,7 +203,7 @@ Promise.race(bases2).then(async () => {
       }
     }
     setConfig(config) {
-      this.hass = hass();
+      if (!this.hass) this.hass = hass();
       this.mode = config.mode ? config.mode : 'pre-select'; //Set default mode to hui-card-picker
       this.area_id = config.area ? config.area : "";
       this.domain = config.domain ? config.domain : "";
@@ -201,42 +228,39 @@ Promise.race(bases2).then(async () => {
 
       this.rowSpanXl = config.rowSpanXl ? config.rowSpanXl : "1";
       this.colSpanXl = config.colSpanXl ? config.colSpanXl : "1";
-
-      const loader = document.createElement("hui-masonry-view");
-      loader.lovelace = { editMode: true };
-      loader.willUpdate(new Map());
+      this._configReady = true;
+      this._startEditorIfReady();
     }
-    async connectedCallback(){
+    connectedCallback(){
       super.connectedCallback();
-
-      await this._loadBlueprints();
-
-      // //loadHaYamlEditor Start
-      //   if (customElements.get("ha-yaml-editor")) return;
-
-      //   // Load in ha-yaml-editor from developer-tools-service
-      //   const ppResolver = document.createElement("partial-panel-resolver");
-      //   const routes = (ppResolver).getRoutes([
-      //     {
-      //       component_name: "developer-tools",
-      //       url_path: "a",
-      //     },
-      //   ]);
-      //   await routes.routes.a.load();
-      //   const devToolsRouter = document.createElement("developer-tools-router");
-      //   await (devToolsRouter).routerOptions.routes.service.load();
-      // //loadHaYamlEditor End
-      const ch = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
-      const c = await ch.createCardElement({ type: "button" });
-      await c.constructor.getConfigElement();
+      this._connectedLoadOwner.connect();
+      this._startEditorIfReady();
     }
 
-    async _loadBlueprints(){
-      //Load blueprints
-      this.blueprints = await this.hass.callWS({
+    disconnectedCallback(){
+      super.disconnectedCallback();
+      this._connectedLoadOwner.disconnect();
+    }
+
+    _startEditorIfReady() {
+      if (!this._configReady || !this._hass) return;
+      this._connectedLoadOwner.ready();
+    }
+
+    async _loadEditor({ isCurrent }) {
+      const hass = this._hass;
+      const connection = hassConnectionIdentity(hass);
+      const blueprints = await websocketReadStore.read(hass, {
         type: 'dwains_dashboard/get_blueprints'
       });
+      if (!isCurrent() || hassConnectionIdentity(this._hass) !== connection) return;
+      this.blueprints = blueprints;
     }
+
+    _loadBlueprints() {
+      return this._connectedLoadOwner.reload();
+    }
+
     magicStuff(ev) {
       //console.log(ev.detail.config);
       this.cardConfig = ev.detail.config;
@@ -252,7 +276,7 @@ Promise.race(bases2).then(async () => {
         if(key && select.value !== undefined) this[key] = `${select.value}`;
       });
       const cardData = JSON.stringify(this.cardConfig);
-      this.hass.connection.sendMessagePromise({
+      this.hass.callWS({
         type: 'dwains_dashboard/add_card',
         card_data: cardData,
         area_id: this.area_id,
@@ -277,7 +301,7 @@ Promise.race(bases2).then(async () => {
       );
     }
     _removeCard(){
-      this.hass.connection.sendMessagePromise({
+      this.hass.callWS({
         type: 'dwains_dashboard/remove_card',
         area_id: this.area_id,
         domain: this.domain,
@@ -300,12 +324,13 @@ Promise.race(bases2).then(async () => {
     }
     _handleDeleteBlueprintClicked(ev){
       const blueprint = ev.currentTarget.blueprint;
-      this.hass.connection.sendMessagePromise({
+      this.hass.callWS({
         type: 'dwains_dashboard/delete_blueprint',
         blueprint: blueprint
       }).then(
           (resp) => {
             console.log(resp);
+            websocketReadStore.invalidate(this.hass);
             this._loadBlueprints();
             this.requestUpdate();
           },
@@ -333,7 +358,7 @@ Promise.race(bases2).then(async () => {
       if(!this.installBlueprintYaml){
         alert('No YAML code entered!');
       }
-      this.hass.connection.sendMessagePromise({
+      this.hass.callWS({
         type: 'dwains_dashboard/install_blueprint',
         yamlCode: JSON.stringify(this.installBlueprintYaml),
       }).then(
@@ -341,6 +366,7 @@ Promise.race(bases2).then(async () => {
               console.log(resp);
               if(resp["succesfull"]){
                 alert(this.hass.localize("ui.common.successfully_saved"));
+                websocketReadStore.invalidate(this.hass);
                 this._loadBlueprints();
                 this.requestUpdate();
               } else {
@@ -354,20 +380,13 @@ Promise.race(bases2).then(async () => {
     }
     _haSelectChanged(ev) {
       ev.stopPropagation();
-      const target = ev.currentTarget || ev.target;
       // `ha-select` exposes its own `type` property in newer Home Assistant
       // versions. Prefer our explicit field name, otherwise a selected value
       // would be assigned to that internal type (for example "select-one")
       // instead of rowSpan/colSpan.
-      const type = target?.name || target?.dataset?.field || target?.type;
-      let value = ev.detail?.value;
-      if(value === undefined && ev.detail?.index !== undefined){
-        value = target?.children?.[ev.detail.index]?.value ?? target?.items?.[ev.detail.index]?.value;
-      }
-      value ??= ev.target !== target ? ev.target?.value : undefined;
-      value ??= target?.value ?? target?.selectedValue ?? target?._value;
-      if(type && value !== undefined){
-        this[type] = `${value}`;
+      const { field, value } = readSelectEvent(ev);
+      if(field && value !== undefined){
+        this[field] = `${value}`;
         this.requestUpdate();
       }
     }
@@ -512,11 +531,11 @@ Promise.race(bases2).then(async () => {
         return html`
           <div class="edit-element">
             <h1 style="font-size: 17px; font-weight: bold;">Select the card you want to add to ${this.name}</h1>
-            <hui-card-picker
+            <dwains-card-picker
               @config-changed=${this.magicStuff}
               .hass=${this.hass}
               .lovelace=${{views: []}}
-            ></hui-card-picker>
+            ></dwains-card-picker>
             <div class="card-footer">
               <ha-button slot="secondaryAction" @click=${(e) => closePopup()}>
                 ${this.hass.localize("ui.common.cancel")}
@@ -614,17 +633,17 @@ Promise.race(bases2).then(async () => {
               </ha-select>
             </div>
             </div>
-            <hui-card-element-editor
+            <dwains-card-config-editor
               @save-config=${this.magicStuffSecond}
               @config-changed=${this.magicStuff}
               .value=${this.cardConfig}
               .hass=${this.hass}
               .lovelace=${{views: []}}
-            ></hui-card-element-editor>
-            <hui-card-preview
+            ></dwains-card-config-editor>
+            <dwains-card-preview
               .hass=${this.hass}
               .config=${this.cardConfig}
-            ></hui-card-preview>
+            ></dwains-card-preview>
             <div class="card-footer">
               ${this.filename ? html `<ha-button @click=${this._removeCard}>${this.hass.localize("ui.common.remove")}</ha-button>` : ""}
               <ha-button @click=${this._sendCard}>${this.hass.localize("ui.common.submit")}</ha-button>
@@ -633,6 +652,5 @@ Promise.race(bases2).then(async () => {
         `;
       }
     }
-  }
-  customElements.define("dwains-create-custom-card-card", DwainsCreateCustomCardCard);
-});
+}
+defineDwainsElement("dwains-create-custom-card-card", DwainsCreateCustomCardCard);

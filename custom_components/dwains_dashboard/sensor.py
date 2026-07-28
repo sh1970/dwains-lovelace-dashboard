@@ -1,14 +1,14 @@
-from homeassistant.helpers.entity import Entity
-from datetime import datetime, timedelta
+from datetime import timedelta
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.util import Throttle
 
-from .const import DOMAIN, VERSION
+from .const import VERSION
+from .runtime_data import get_domain_data
 
 import logging
 
 import asyncio
 import aiohttp
-import async_timeout
 import json
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -20,7 +20,7 @@ MIN_TIME_BETWEEN_UPDATES = timedelta(minutes=800)
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     """Setup sensor platform."""
     #_LOGGER.error("async_setup_platform called")
-    async_add_entities([LatestVersionSensor()])
+    async_add_entities([LatestVersionSensor(LatestVersion(hass))])
 
 
 async def async_setup_entry(hass, config_entry, async_add_devices):
@@ -31,50 +31,22 @@ async def async_setup_entry(hass, config_entry, async_add_devices):
     async_add_devices([LatestVersionSensor(data)])
 
 
-class LatestVersionSensor(Entity):
+class LatestVersionSensor(SensorEntity):
     """Latest version sensor."""
+
+    _attr_icon = "mdi:alpha-d-box"
+    _attr_name = "Dwains Dashboard Latest version"
+    _attr_unique_id = "dwains-dashboard-latest-version"
 
     def __init__(self, data):
         """Initialize the sensor."""
-        self._state = None
         self.data = data
-
-    @property
-    def unique_id(self):
-        """Return a unique ID to use for this sensor."""
-        return (
-            "dwains-dashboard-latest-version"
-        )
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return "Dwains Dashboard Latest version"
-
-    @property
-    def icon(self):
-        """Return the icon of the sensor."""
-        return "mdi:alpha-d-box"
-
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        return self._state
-
-    @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return "latest version"
-
-    # def update(self):
-    #     """Fetch new state data for the sensor.
-    #     This is the only method that should fetch new data for Home Assistant.
-    #     """
-    #     self._state = self.hass.data[DOMAIN]['latest_version']
 
     async def async_update(self):
         await self.data.update()
-        self._state = self.hass.data[DOMAIN]['latest_version']
+        self._attr_native_value = (
+            get_domain_data(self.hass).get("latest_version") or None
+        )
 
 class LatestVersion:
 
@@ -87,14 +59,15 @@ class LatestVersion:
         session = async_get_clientsession(self._hass)
 
         try:
-            with async_timeout.timeout(10):
-                response = await session.get(_RESOURCE)
-            result = await response.read()
-            data = json.loads(result)
+            async with asyncio.timeout(10):
+                async with session.get(_RESOURCE) as response:
+                    response.raise_for_status()
+                    data = json.loads(await response.read())
+            if not isinstance(data, dict):
+                raise TypeError("version response is not an object")
             if "latest_version" in data:
-                #_LOGGER.error(data)
-                self._hass.data[DOMAIN]['latest_version'] = json.loads(result)["latest_version"] 
-        except ValueError as err:
-            _LOGGER.error("Dwains Dashboard version check failed %s", err.args)
+                get_domain_data(self._hass)["latest_version"] = data["latest_version"]
+        except (ValueError, TypeError) as err:
+            _LOGGER.error("Dwains Dashboard version check failed: %s", err)
         except (asyncio.TimeoutError, aiohttp.ClientError) as err:
-            _LOGGER.error("Dwains Dashboard version check failed %s", repr(err))
+            _LOGGER.error("Dwains Dashboard version check failed: %r", err)
