@@ -806,7 +806,11 @@ const GLOBAL_DEVICE_PAGE_DOMAINS = new Set([
           const colSpanXl = ev.currentTarget.colSpanXl;
           const rowSpanXl = ev.currentTarget.rowSpanXl;
 
-          const cardConfig = this.configuration.device_cards[domain][filename];
+          // Keep the shared configuration snapshot immutable while preparing
+          // the editor-only card data.
+          const cardConfig = structuredClone(
+            this.configuration.device_cards[domain][filename],
+          );
           let position = "top";
           if(cardConfig["position"]){
             //Config has the DD position key, but editor doesnt understand that so remove it and parse it to editor

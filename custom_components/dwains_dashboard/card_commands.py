@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 
 from .configuration_runtime import serialize_configuration_mutation
 from .mutation_files import file_has_content, remove_file_if_exists
-from .yaml_files import dump_json_normalized_yaml_file
+from .yaml_files import dump_and_verify_json_normalized_yaml_file
 
 
 def _card_directory(msg, *, page_driven=False):
@@ -72,10 +72,20 @@ async def ws_handle_add_card(
     ):
         suffix = datetime.now().strftime("%Y%m%d%H%M%S")
         filename = hass.config.path(f"{directory}/{card_type}{suffix}.yaml")
-    await hass.async_add_executor_job(dump_json_normalized_yaml_file, filename, card)
+    persisted_card = await hass.async_add_executor_job(
+        dump_and_verify_json_normalized_yaml_file,
+        filename,
+        card,
+    )
     hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
     hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
-    connection.send_result(msg["id"], {"succesfull": "card added succesfully"})
+    connection.send_result(
+        msg["id"],
+        {
+            "succesfull": "card added succesfully",
+            "card": persisted_card,
+        },
+    )
 
 
 @websocket_api.websocket_command(

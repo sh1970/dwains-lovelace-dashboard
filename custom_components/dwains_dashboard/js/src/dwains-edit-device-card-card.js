@@ -202,11 +202,18 @@ class DwainsEditDeviceCardCard extends LitElement {
         }
       }
       setConfig(config) {
+        // Keep transient editor state for the lifetime of this popup instance.
+        if (this._editorSessionInitialized) {
+          this._configReady = true;
+          this._startEditorIfReady();
+          return;
+        }
+        this._editorSessionInitialized = true;
         if (!this.hass) this.hass = hass();
         this.mode = config.mode ? config.mode : 'dwains-dashboard-blueprint-select'; //Set default mode to hui-card-picker
         this.domain = config.domain;
         if(config.cardConfig){
-          const cardConfig = config.cardConfig;
+          const cardConfig = structuredClone(config.cardConfig);
           delete cardConfig["input_entity"];
           delete cardConfig["input_name"];
           this.cardConfig = cardConfig;

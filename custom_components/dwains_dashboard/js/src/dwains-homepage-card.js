@@ -1507,7 +1507,11 @@ function getDwainsHass() {
       const colSpanXl = ev.currentTarget.colSpanXl;
       const rowSpanXl = ev.currentTarget.rowSpanXl;
 
-      const cardConfig = this.configuration.area_cards[areaId][filename];
+      // The dashboard snapshot is shared by every rendered area. Editing must
+      // never delete Dwains layout metadata from that authoritative object.
+      const cardConfig = structuredClone(
+        this.configuration.area_cards[areaId][filename],
+      );
       let position = "top";
       if(cardConfig["position"]){
         //Config has the DD position key, but editor doesnt understand that so remove it and parse it to editor

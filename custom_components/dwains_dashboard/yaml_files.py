@@ -106,3 +106,16 @@ def dump_json_normalized_yaml_file(file_path: str, value: Any) -> None:
         )
 
     _atomic_yaml_write(file_path, write)
+
+
+def dump_and_verify_json_normalized_yaml_file(
+    file_path: str,
+    value: Any,
+) -> Any:
+    """Atomically persist card data and return the authoritative disk value."""
+    expected = json.loads(json.dumps(value))
+    dump_json_normalized_yaml_file(file_path, expected)
+    persisted = load_yaml_file(file_path)
+    if persisted != expected:
+        raise OSError(f"Card configuration verification failed for {file_path}")
+    return persisted

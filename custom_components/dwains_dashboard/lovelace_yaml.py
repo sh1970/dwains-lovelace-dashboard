@@ -23,6 +23,10 @@ class DwainsDashboardLovelaceYAML(LovelaceYAML):
         super().__init__(hass, url_path, config)
         self._processor = processor
 
+    def invalidate_cache(self, *_args) -> None:
+        """Invalidate includes which Lovelace cannot track through the root mtime."""
+        self._cache = None
+
     @override
     def _load_config(self, force: bool) -> tuple[bool, dict, json_fragment]:
         if not force and self._cache is not None:

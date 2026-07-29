@@ -99,6 +99,11 @@ def serialize_configuration_mutation(handler):
     async def serialized(hass, connection, msg):
         runtime = get_configuration_runtime(hass)
         async with runtime.mutation_lock:
+            # A mutation may fire a frontend reload event before its WebSocket
+            # handler returns. Remove the old snapshot up front so a read
+            # triggered by that event waits on this lock instead of returning
+            # stale data which can subsequently overwrite the new file.
+            runtime.clear_cache()
             try:
                 return await handler(hass, connection, msg)
             finally:

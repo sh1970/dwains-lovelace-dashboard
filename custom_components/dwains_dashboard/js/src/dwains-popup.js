@@ -7,6 +7,7 @@ import { subtlePopupStyles } from './styles/dwains-subtle-style';
 const { loadCardHelpers } = require('./card-helpers-loader');
 const { CardBuildOwner } = require('./card-build-owner');
 const { popupHistoryController } = require('./popup-history-controller');
+const { handlePopupCardRebuild } = require('./popup-rebuild-policy');
 const { defineOwnedElement } = require('./custom-element-registration');
 const {
   closeCardToolsPopup,
@@ -64,6 +65,10 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
           }
         }
 
+        _handleCardRebuild(event) {
+          handlePopupCardRebuild(this._card, event, () => this._makeCard());
+        }
+
         disconnectedCallback() {
           super.disconnectedCallback();
           this._cardBuilds.invalidate();
@@ -111,7 +116,7 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
               @closed=${this.closeDialog}
               .heading=${true}
               hideActions
-              @ll-rebuild=${this._makeCard}
+              @ll-rebuild=${this._handleCardRebuild}
             >
             ${this.fullscreen
               ? html`<div slot="heading"></div>`

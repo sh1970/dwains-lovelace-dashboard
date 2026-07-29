@@ -203,6 +203,14 @@ class DwainsCreateCustomCardCard extends LitElement {
       }
     }
     setConfig(config) {
+      // The element instance owns one editor session. Repeated HA setConfig()
+      // calls must not overwrite the card and mode selected by the user.
+      if (this._editorSessionInitialized) {
+        this._configReady = true;
+        this._startEditorIfReady();
+        return;
+      }
+      this._editorSessionInitialized = true;
       if (!this.hass) this.hass = hass();
       this.mode = config.mode ? config.mode : 'pre-select'; //Set default mode to hui-card-picker
       this.area_id = config.area ? config.area : "";
@@ -210,7 +218,7 @@ class DwainsCreateCustomCardCard extends LitElement {
       this.position = config.position;
       this.page = config.page;
       if(config.cardConfig){
-        const cardConfig = config.cardConfig;
+        const cardConfig = structuredClone(config.cardConfig);
         delete cardConfig["input_entity"];
         delete cardConfig["input_name"];
         this.cardConfig = cardConfig;
@@ -262,15 +270,21 @@ class DwainsCreateCustomCardCard extends LitElement {
     }
 
     magicStuff(ev) {
-      //console.log(ev.detail.config);
-      this.cardConfig = ev.detail.config;
+      this.cardConfig = structuredClone(ev.detail.config);
       this.mode = 'editor-element';
-      this.requestUpdate();
     }
     magicStuffSecond(ev){
       //console.log(ev);
     }
-  _sendCard(){
+  async _sendCard(){
+      const editor = this.renderRoot
+        ?.querySelector("dwains-card-config-editor");
+      const editorConfig = await (
+        editor?.commitConfig?.() ?? editor?.getConfig?.()
+      );
+      if (editorConfig && typeof editorConfig === "object") {
+        this.cardConfig = editorConfig;
+      }
       this.shadowRoot?.querySelectorAll("ha-select").forEach((select) => {
         const key = select.name || select.type;
         if(key && select.value !== undefined) this[key] = `${select.value}`;
@@ -530,7 +544,7 @@ class DwainsCreateCustomCardCard extends LitElement {
       if(this.mode == 'hui-card-picker'){
         return html`
           <div class="edit-element">
-            <h1 style="font-size: 17px; font-weight: bold;">Select the card you want to add to ${this.name}</h1>
+            <h1 style="font-size: 17px; font-weight: bold;">${translateEngine(this.hass, 'editor.select_card_for')} ${this.name}</h1>
             <dwains-card-picker
               @config-changed=${this.magicStuff}
               .hass=${this.hass}

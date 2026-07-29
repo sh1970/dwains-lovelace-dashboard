@@ -16,7 +16,6 @@ class DashboardDomainData(TypedDict, total=False):
 
     notifications: MutableMapping[str, MutableMapping[str, Any]]
     commands: MutableMapping[str, Any]
-    latest_version: str
     configuration_runtime: Any
     configuration_cache_listeners_registered: bool
     dashboard_registration: Any

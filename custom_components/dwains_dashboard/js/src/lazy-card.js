@@ -30,8 +30,16 @@ function createLazyCardClass({
     }
 
     set cardFactory(factory) {
-      if (this.__cardFactory === factory) return;
-      this.__cardFactory = typeof factory === "function" ? factory : undefined;
+      const nextFactory = typeof factory === "function" ? factory : undefined;
+      if (this.__cardFactory === nextFactory) return;
+      this.__cardFactory = nextFactory;
+      // Lit may reuse this wrapper for a different list item whose `.card`
+      // expression is also undefined. In that case the card setter is not
+      // invoked, so a factory-owned card must be invalidated explicitly.
+      this.__cardCreation = undefined;
+      if (this.__cardFromFactory) {
+        this._setCard(undefined, false);
+      }
       if (this.__mounted && !this.__c) void this._createCard();
     }
 
@@ -40,8 +48,13 @@ function createLazyCardClass({
     }
 
     set card(card) {
+      this._setCard(card, false);
+    }
+
+    _setCard(card, fromFactory) {
       if (this.__c === card) return;
       this.__c = card;
+      this.__cardFromFactory = Boolean(card && fromFactory);
       if (card && this.__latestHass !== undefined) {
         try {
           card.hass = this.__latestHass;
@@ -123,7 +136,7 @@ function createLazyCardClass({
         if (this.__cardCreation !== creation) return;
         this.__cardCreation = undefined;
         if (this.__c) return;
-        this.card = card;
+        this._setCard(card, true);
       } catch (error) {
         if (this.__cardCreation === creation) this.__cardCreation = undefined;
         reportError("Failed to create lazy card", error);

@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant
 from .configuration_runtime import serialize_configuration_mutation
 from .mutation_files import remove_file_if_exists
 from .yaml_files import (
-    dump_json_normalized_yaml_file,
+    dump_and_verify_json_normalized_yaml_file,
     dump_yaml_file,
     load_yaml_file_or_default,
 )
@@ -63,8 +63,8 @@ async def _write_domain_card(hass, msg, directory):
     filename = hass.config.path(
         f'dwains-dashboard/configs/cards/{directory}/{msg["domain"]}.yaml'
     )
-    await hass.async_add_executor_job(
-        dump_json_normalized_yaml_file,
+    return await hass.async_add_executor_job(
+        dump_and_verify_json_normalized_yaml_file,
         filename,
         filecontent,
     )
@@ -91,9 +91,15 @@ async def ws_handle_edit_device_card(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
 ) -> None:
     """Handle saving a device card."""
-    await _write_domain_card(hass, msg, "devices_card")
+    persisted_card = await _write_domain_card(hass, msg, "devices_card")
     hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
-    connection.send_result(msg["id"], {"succesfull": "Device card saved"})
+    connection.send_result(
+        msg["id"],
+        {
+            "succesfull": "Device card saved",
+            "card": persisted_card,
+        },
+    )
 
 
 @websocket_api.websocket_command(
@@ -130,10 +136,16 @@ async def ws_handle_edit_device_popup(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
 ) -> None:
     """Handle saving a device popup."""
-    await _write_domain_card(hass, msg, "devices_popup")
+    persisted_card = await _write_domain_card(hass, msg, "devices_popup")
     hass.bus.async_fire("dwains_dashboard_config_reload")
     hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
-    connection.send_result(msg["id"], {"succesfull": "Device popup saved"})
+    connection.send_result(
+        msg["id"],
+        {
+            "succesfull": "Device popup saved",
+            "card": persisted_card,
+        },
+    )
 
 
 @websocket_api.websocket_command(

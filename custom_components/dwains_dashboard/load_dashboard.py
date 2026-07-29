@@ -14,6 +14,15 @@ _LOGGER = logging.getLogger(__name__)
 DASHBOARD_URL = "dwains-dashboard"
 DASHBOARD_REGISTRATION_KEY = "dashboard_registration"
 
+
+def invalidate_dashboard_cache(hass) -> None:
+    """Invalidate the registered dashboard's complete YAML include snapshot."""
+    domain_data = find_domain_data(hass) or {}
+    dashboard = domain_data.get(DASHBOARD_REGISTRATION_KEY)
+    if dashboard is not None:
+        dashboard.invalidate_cache()
+
+
 def load_dashboard(hass, config_entry):
 
     #_LOGGER.warning(config_entry.options)

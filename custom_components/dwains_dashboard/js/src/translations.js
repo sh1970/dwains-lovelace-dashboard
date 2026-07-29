@@ -23,6 +23,10 @@ const translations = {
         editor: {
             lovelace_card: 'Lovelace Card',
             create_lovelace_card: 'Create a new lovelace card from scratch',
+            select_card_for: 'Select a card for',
+            select_popup_card_for: 'Select a popup card for',
+            loading_card_editor: 'Loading card editor…',
+            no_visual_editor: 'This card has no visual editor. Edit its JSON configuration:',
             dwains_dashboard_blueprint: 'Dwains Dashboard Blueprint',
             use_dwains_dashboard_blueprint: 'Use a Dwain Dashboard Blueprint to create a card',
             row_span: 'Row span',
@@ -613,6 +617,10 @@ const translations = {
         editor: {        
             lovelace_card: 'Lovelace Karte',        
             create_lovelace_card: 'Erstelle eine neue Lovelace Karte',        
+            select_card_for: 'Karte auswählen für',
+            select_popup_card_for: 'Pop-up-Karte auswählen für',
+            loading_card_editor: 'Karteneditor wird geladen…',
+            no_visual_editor: 'Für diese Karte gibt es keinen visuellen Editor. Bearbeite ihre JSON-Konfiguration:',
             dwains_dashboard_blueprint: 'Dwains Dashboard Blueprint',        
             use_dwains_dashboard_blueprint: 'Nutze Dwains Dashboard Blueprint um eine Karte zu erstellen',       
             row_span: 'Anzahl Zeilen',        

@@ -8,6 +8,7 @@ import { closePopup } from "./helpers";
 const { websocketReadStore } = require('./websocket-read-store');
 const { ConnectedLoadOwner } = require('./connected-load-owner');
 const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
+const { prepareEntityEditorCardConfig, renderBlueprintSelection } = require('./blueprint-selection');
 const { defineDwainsElement } = require('./custom-element-registration');
 
 class DwainsEditEntityPopupCard extends LitElement {
@@ -205,14 +206,21 @@ class DwainsEditEntityPopupCard extends LitElement {
       }
     }
     setConfig(config) {
+      // Keep transient editor state for the lifetime of this popup instance.
+      if (this._editorSessionInitialized) {
+        this._configReady = true;
+        this._startEditorIfReady();
+        return;
+      }
+      this._editorSessionInitialized = true;
       if (!this.hass) this.hass = hass();
       this.mode = config.mode ? config.mode : 'pre-select'; //Set default mode to hui-card-picker
       this.entity_id = config.entity_id;
       if(config.cardConfig){
-        const cardConfig = config.cardConfig;
-        delete cardConfig["input_entity"];
-        delete cardConfig["input_name"];
-        this.cardConfig = cardConfig;
+        this.cardConfig = prepareEntityEditorCardConfig(
+          config.cardConfig,
+          this.entity_id,
+        );
       } else {
         this.cardConfig = "";
       }
@@ -251,37 +259,39 @@ class DwainsEditEntityPopupCard extends LitElement {
     }
 
     magicStuff(ev) {
-      //console.log(ev.detail.config);
-      //Lets start with this, ugly, but fix it later...
-      const cardType = ev.detail.config.type;
+      const config = structuredClone(ev.detail.config);
+      const cardType = config.type;
       if(SUPPORTED_CARDS_WITH_ENTITY.includes(cardType)){
-        this.cardConfig = {...ev.detail.config, entity: this.entity_id};
+        if(!config.entity) config.entity = this.entity_id;
+        this.cardConfig = config;
       } else {
-        this.cardConfig = ev.detail.config;
+        this.cardConfig = config;
       }
       this.mode = 'editor-element';
-      this.requestUpdate();
     }
     magicStuffSecond(ev){
       //console.log(ev);
     }
-    _sendCard(){
-      const cardData = JSON.stringify(this.cardConfig);
-      //console.log(cardData);
-      //Here parse it with websocket to my integration?
-      this.hass.callWS({
-        type: 'dwains_dashboard/edit_entity_popup',
-        cardData: cardData,
-        entityId: this.entity_id,
-      }).then(
-          (resp) => {
-              console.log(resp);
-              closePopup();
-          },
-          (err) => {
-              console.error('Message failed!', err);
-          }
+    async _sendCard(){
+      const editor = this.renderRoot
+        ?.querySelector("dwains-card-config-editor");
+      const editorConfig = await (
+        editor?.commitConfig?.() ?? editor?.getConfig?.()
       );
+      if (editorConfig && typeof editorConfig === "object") {
+        this.cardConfig = editorConfig;
+      }
+      try {
+        await this.hass.callWS({
+          type: 'dwains_dashboard/edit_entity_popup',
+          cardData: JSON.stringify(this.cardConfig),
+          entityId: this.entity_id,
+        });
+        websocketReadStore.invalidate(this.hass);
+        closePopup();
+      } catch (err) {
+        console.error('Message failed!', err);
+      }
     }
     _switchMode(ev){
       const mode = ev.currentTarget.mode;
@@ -493,7 +503,7 @@ class DwainsEditEntityPopupCard extends LitElement {
       if(this.mode == 'hui-card-picker'){
         return html`
           <div class="edit-element">
-            <h1 style="font-size: 17px; font-weight: bold;">Select the popup card you want to use for ${this.entity_id}</h1>
+            <h1 style="font-size: 17px; font-weight: bold;">${translateEngine(this.hass, 'editor.select_popup_card_for')} ${this.entity_id}</h1>
             <dwains-card-picker
               @config-changed=${this.magicStuff}
               .hass=${this.hass}
@@ -509,6 +519,7 @@ class DwainsEditEntityPopupCard extends LitElement {
       } else {
         return html`
           <div class="edit-element">
+            ${renderBlueprintSelection(html, translateEngine, this.hass, this.cardConfig, this.blueprints)}
             <dwains-card-config-editor
               @save-config=${this.magicStuffSecond}
               @config-changed=${this.magicStuff}

@@ -359,7 +359,13 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             )
             configuration_runtime = get_configuration_runtime(self.hass)
             async with configuration_runtime.mutation_lock:
-                await self.hass.async_add_executor_job(_write_settings, path, header)
+                configuration_runtime.clear_cache()
+                try:
+                    await self.hass.async_add_executor_job(
+                        _write_settings, path, header
+                    )
+                finally:
+                    configuration_runtime.clear_cache()
             self.hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
             self.hass.bus.async_fire("dwains_dashboard_navigation_card_reload")
 

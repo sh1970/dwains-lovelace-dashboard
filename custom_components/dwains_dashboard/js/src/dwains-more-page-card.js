@@ -223,24 +223,18 @@ class MorePageCard extends LitElement {
 
     async _loadConfiguration({ isCurrent = () => true } = {}) {
         const pendingPage = this._pendingPage;
-        const localPage = this.cardConfig && typeof this.cardConfig === "object" ? {
-            foldername: this.foldername,
-            name: this.name,
-            icon: this.icon,
-            show_in_navbar: this.showInNavbar,
-            card: this.cardConfig,
-        } : undefined;
-        const page = pendingPage || (!this._forcePageRead && localPage
-          ? localPage
-          : await websocketReadStore.readPreferred(
-              this._hass,
-              { type: 'dwains_dashboard/more_page/get', foldername: this.foldername },
-              { type: 'dwains_dashboard/configuration/get' },
-              {
-                capability: "dashboard-read-slices",
-                selectFallback: (configuration) => configuration?.more_pages?.[this.foldername],
-              },
-          ));
+        // The embedded Lovelace config is only a bootstrap value and may still
+        // represent an older dashboard cache after a browser hard reload.
+        // Always hydrate the page from its authoritative disk-backed endpoint.
+        const page = pendingPage || await websocketReadStore.readPreferred(
+            this._hass,
+            { type: 'dwains_dashboard/more_page/get', foldername: this.foldername },
+            { type: 'dwains_dashboard/configuration/get' },
+            {
+              capability: "dashboard-read-slices",
+              selectFallback: (configuration) => configuration?.more_pages?.[this.foldername],
+            },
+        );
         if (!page) {
           throw new Error(`More page "${this.foldername}" has no card configuration`);
         }

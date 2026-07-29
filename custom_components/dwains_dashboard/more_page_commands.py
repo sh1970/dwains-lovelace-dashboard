@@ -21,7 +21,7 @@ from .more_page_files import (
 )
 from .process_yaml import get_yaml_processor, reload_configuration
 from .yaml_files import (
-    dump_json_normalized_yaml_file,
+    dump_and_verify_json_normalized_yaml_file,
     dump_yaml_file,
     load_yaml_file_or_default,
 )
@@ -119,16 +119,7 @@ async def ws_handle_edit_more_page_button(
             }
         )
         await _save_more_page_config(hass, msg["more_page"], config)
-        processor = get_yaml_processor(hass)
-        page = processor.more_pages.get(msg["more_page"])
-        if page is not None:
-            page.update(
-                {
-                    "name": msg["name"],
-                    "icon": msg["icon"],
-                    "show_in_navbar": msg["showInNavbar"],
-                }
-            )
+        await reload_configuration(hass)
     hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
     hass.bus.async_fire("dwains_dashboard_navigation_card_reload")
     hass.bus.async_fire("dwains_dashboard_more_pages_reload")
@@ -197,7 +188,7 @@ async def ws_handle_edit_more_page(
         page_path = _more_page_path(hass, foldername, "page.yaml")
 
     await hass.async_add_executor_job(
-        dump_json_normalized_yaml_file,
+        dump_and_verify_json_normalized_yaml_file,
         page_path,
         card_data,
     )
@@ -281,10 +272,7 @@ async def ws_handle_add_more_page_to_navbar(
     show_in_navbar = msg["show_in_navbar"]
     config["show_in_navbar"] = show_in_navbar
     await _save_more_page_config(hass, foldername, config)
-    processor = get_yaml_processor(hass)
-    page = processor.more_pages.get(foldername)
-    if page is not None:
-        page["show_in_navbar"] = show_in_navbar
+    await reload_configuration(hass)
     hass.bus.async_fire("dwains_dashboard_navigation_card_reload")
     hass.bus.async_fire("dwains_dashboard_more_pages_reload")
     connection.send_result(

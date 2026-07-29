@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant
 from .configuration_runtime import serialize_configuration_mutation
 from .mutation_files import remove_file_if_exists
 from .yaml_files import (
-    dump_json_normalized_yaml_file,
+    dump_and_verify_json_normalized_yaml_file,
     dump_yaml_file,
     load_yaml_file_or_default,
 )
@@ -42,8 +42,8 @@ async def _write_entity_override(hass, msg, directory, flag):
     filename = hass.config.path(
         f'dwains-dashboard/configs/cards/{directory}/{msg["entityId"]}.yaml'
     )
-    await hass.async_add_executor_job(
-        dump_json_normalized_yaml_file,
+    persisted_card = await hass.async_add_executor_job(
+        dump_and_verify_json_normalized_yaml_file,
         filename,
         json.loads(msg["cardData"]),
     )
@@ -52,6 +52,7 @@ async def _write_entity_override(hass, msg, directory, flag):
         entities[msg["entityId"]] = OrderedDict()
     entities[msg["entityId"]].update({flag: True})
     await _save_entities(hass, entities)
+    return persisted_card
 
 
 @websocket_api.websocket_command(
@@ -118,10 +119,18 @@ async def ws_handle_edit_entity_card(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
 ) -> None:
     """Save an entity card override and enable it."""
-    await _write_entity_override(hass, msg, "entities", "custom_card")
+    persisted_card = await _write_entity_override(
+        hass, msg, "entities", "custom_card"
+    )
     hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
     hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
-    connection.send_result(msg["id"], {"succesfull": "Card added succesfully"})
+    connection.send_result(
+        msg["id"],
+        {
+            "succesfull": "Card added succesfully",
+            "card": persisted_card,
+        },
+    )
 
 
 @websocket_api.websocket_command(
@@ -138,11 +147,19 @@ async def ws_handle_edit_entity_popup(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
 ) -> None:
     """Save an entity popup override and enable it."""
-    await _write_entity_override(hass, msg, "entities_popup", "custom_popup")
+    persisted_card = await _write_entity_override(
+        hass, msg, "entities_popup", "custom_popup"
+    )
     hass.bus.async_fire("dwains_dashboard_config_reload")
     hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
     hass.bus.async_fire("dwains_dashboard_devicespage_card_reload")
-    connection.send_result(msg["id"], {"succesfull": "Popup added succesfully"})
+    connection.send_result(
+        msg["id"],
+        {
+            "succesfull": "Popup added succesfully",
+            "card": persisted_card,
+        },
+    )
 
 
 async def _remove_entity_card_file(hass, entity_id, directory):

@@ -286,7 +286,16 @@ class DwainsEditMorePageCard extends LitElement {
     }
 
     setConfig(config) {
-    console.log('DwainsEditMorePageCard...');
+    // This element represents one popup/editor session. Home Assistant may call
+    // setConfig() repeatedly on the same card instance while its parent updates.
+    // Reapplying the initial config here would discard in-progress form values
+    // and return the user from the visual editor to the card picker.
+    if (this._editorSessionInitialized) {
+        this._configReady = true;
+        this._startEditorIfReady();
+        return;
+    }
+    this._editorSessionInitialized = true;
     this.mode = config.mode ? config.mode : 'pre-select'; //Set default mode to hui-card-picker
     this.foldername = config.foldername ? config.foldername : "";
     if(config.cardConfig){
@@ -339,11 +348,9 @@ class DwainsEditMorePageCard extends LitElement {
     return this._connectedLoadOwner.reload();
     }
     magicStuff(ev) {
-    //console.log(ev.detail.config);
-    this.cardConfig = ev.detail.config;
+    this.cardConfig = structuredClone(ev.detail.config);
     this._applyDefaultMorePageName();
     this.mode = 'editor-element';
-    this.requestUpdate();
     }
     magicStuffSecond(ev){
     //console.log(ev);
@@ -351,6 +358,14 @@ class DwainsEditMorePageCard extends LitElement {
     async _sendCard(){
     if(this._saving) return;
     this._syncMorePageSettingsFromDom();
+    const editor = this.renderRoot
+        ?.querySelector("dwains-card-config-editor");
+    const editorConfig = await (
+        editor?.commitConfig?.() ?? editor?.getConfig?.()
+    );
+    if(editorConfig && typeof editorConfig === "object"){
+        this.cardConfig = editorConfig;
+    }
     this._applyDefaultMorePageName();
 
     if(!this.name){
@@ -686,7 +701,7 @@ class DwainsEditMorePageCard extends LitElement {
     if(this.mode == 'hui-card-picker'){
         return html`
         <div class="edit-element">
-            <h1 style="font-size: 17px; font-weight: bold;"></h1>
+            <h1 style="font-size: 17px; font-weight: bold;">${translateEngine(this._hass, 'editor.select_card_for')} ${this.name}</h1>
             <dwains-card-picker
             @config-changed=${this.magicStuff}
             .hass=${this._hass}

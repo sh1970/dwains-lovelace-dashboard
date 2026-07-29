@@ -320,4 +320,9 @@ async def reload_configuration(hass):
     )
     processor.more_pages.update(pages)
 
+    # The root ui-lovelace.yaml does not change when one of its !include files
+    # changes. Explicitly invalidate the owned Lovelace cache before notifying
+    # clients, otherwise a hard browser reload receives the previous page card.
+    from .load_dashboard import invalidate_dashboard_cache
+    invalidate_dashboard_cache(hass)
     hass.bus.async_fire("dwains_dashboard_reload")
