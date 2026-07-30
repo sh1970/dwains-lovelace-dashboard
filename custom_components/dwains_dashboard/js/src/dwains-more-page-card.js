@@ -44,17 +44,15 @@ class MorePageCard extends LitElement {
         .capitalize {
           text-transform: capitalize;
         }
-        .sticky {
+        .more-page-back-layer {
           position: sticky;
-        }
-        .z-30 {
-          z-index: 30;
-        }
-        .bottom-0 {
           bottom: 0;
-        }
-        .text-right {
+          z-index: 7;
           text-align: right;
+          pointer-events: none;
+        }
+        .more-page-back-layer .back-button {
+          pointer-events: auto;
         }
         .h-8 {
           height: 2rem;
@@ -337,7 +335,7 @@ class MorePageCard extends LitElement {
               <div class="page-state">No page content is configured.</div>
             `}
 
-            <div class="sticky z-30 bottom-0 text-right">
+            <div class="more-page-back-layer">
               <div @click=${this._backButtonClick} class="back-button">
                 <div class="button">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">

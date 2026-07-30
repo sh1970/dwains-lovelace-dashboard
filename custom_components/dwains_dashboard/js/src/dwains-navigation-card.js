@@ -10,6 +10,11 @@ const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-con
 const { websocketReadStore } = require('./websocket-read-store');
 const { defineDwainsElement } = require('./custom-element-registration');
 const {
+  createNavigationActiveState,
+  morePageRoutePath,
+  navigationLocationPath,
+} = require('./navigation-active-state');
+const {
   MORE_PAGE_METADATA_CHANGED_EVENT,
   MORE_PAGE_SAVED_EVENT,
 } = require('./more-page-events');
@@ -129,7 +134,7 @@ class DwainsNavigationCard extends LitElement {
 
       constructor() {
         super();
-        this.currentPath = document.location.pathname;
+        this.currentPath = navigationLocationPath(document.location);
         this.isLoading = true; // Start met laden aangeven
         this._subscriptions = new EventSubscriptionOwner();
         this._listeners = new EventListenerOwner();
@@ -165,7 +170,10 @@ class DwainsNavigationCard extends LitElement {
           this.requestUpdate();
         };
         this._routeChanged = () => {
-          this.currentPath = `${document.location.pathname}${window.location.hash || ""}`;
+          this.currentPath = navigationLocationPath(
+            document.location,
+            this.currentPath,
+          );
           this.requestUpdate();
         };
       }
@@ -296,8 +304,9 @@ class DwainsNavigationCard extends LitElement {
 
       _menuClick(ev){
         const path = ev.currentTarget.path;
-        navigate(window, path);
-        this.currentPath = path;
+        if (navigate(window, path)) {
+          this.currentPath = navigationLocationPath(document.location, path);
+        }
         this.requestUpdate();
     }
 
@@ -312,6 +321,12 @@ class DwainsNavigationCard extends LitElement {
                 b = y[1] && y[1].sort_order ? y[1].sort_order : 99;
             return a == b ? 0 : a > b ? 1 : -1;
           });
+        const activeState = createNavigationActiveState({
+          currentPath: navigationLocationPath(document.location, this.currentPath),
+          fallbackHash: window.location.hash,
+          devices: configuration.devices,
+          morePages: configuration.more_pages,
+        });
 
         return html`
             <div class="dwains-dashboard-nav">
@@ -323,7 +338,7 @@ class DwainsNavigationCard extends LitElement {
                 </div>
                 <div class="mainNavItems">
                     <div
-                        class="${document.location.pathname == '/dwains-dashboard/home' ? 'active' : ''}"
+                        class="${activeState.home ? 'active' : ''}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/home"}
                     >
@@ -331,7 +346,7 @@ class DwainsNavigationCard extends LitElement {
                         <span>${translateEngine(this._hass, 'home.title')}</span>
                     </div>
                     <div
-                        class="${document.location.pathname == '/dwains-dashboard/devices' && !window.location.hash ? 'active' : ''}"
+                        class="${activeState.devices ? 'active' : ''}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/devices"}
                     >
@@ -344,7 +359,7 @@ class DwainsNavigationCard extends LitElement {
                         html`
                             ${v["show_in_navbar"] ? html`
                                 <div
-                                    class="${document.location.pathname == '/dwains-dashboard/devices' && window.location.hash == '#'+k ? 'active' : ''}"
+                                    class="${activeState.device(k) ? 'active' : ''}"
                                     @click=${this._menuClick}
                                     .path=${"/dwains-dashboard/devices#"+k}
                                 >
@@ -357,9 +372,9 @@ class DwainsNavigationCard extends LitElement {
                         html`
                             ${page["show_in_navbar"] ? html`
                                 <div
-                                    class="${document.location.pathname == '/dwains-dashboard/more_page_'+key ? 'active' : ''}"
+                                    class="${activeState.morePage(key) ? 'active' : ''}"
                                     @click=${this._menuClick}
-                                    .path=${"/dwains-dashboard/more_page_"+key}
+                                    .path=${morePageRoutePath(key)}
                                 >
                                     <ha-icon icon="${page["icon"]}"></ha-icon>
                                     <span>${page["name"]}</span>
@@ -367,7 +382,7 @@ class DwainsNavigationCard extends LitElement {
                         `
                     )}
                     <div
-                        class="${document.location.pathname == '/dwains-dashboard/more_page' ? 'active' : ''}"
+                        class="${activeState.morePages ? 'active' : ''}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/more_page"}
                     >
