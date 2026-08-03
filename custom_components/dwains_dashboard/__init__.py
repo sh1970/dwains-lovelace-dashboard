@@ -148,7 +148,7 @@ async def async_unload_entry(hass, config_entry):
     return unload_ok
 
 async def async_remove_entry(hass, config_entry):
-    _LOGGER.warning("Dwains Dashboard is now uninstalled.")
+    _LOGGER.info("Dwains Dashboard is now uninstalled")
 
     ir.async_delete_issue(hass, DOMAIN, "restart_required")
 
@@ -158,7 +158,7 @@ async def async_remove_entry(hass, config_entry):
     remove_notifications(hass)
 
 async def _update_listener(hass, config_entry):
-    _LOGGER.warning('Update_listener called')
+    _LOGGER.info("Dwains Dashboard options changed; reloading configuration")
 
     await process_yaml(hass, config_entry)
 

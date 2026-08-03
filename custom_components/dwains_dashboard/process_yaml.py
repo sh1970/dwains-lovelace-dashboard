@@ -119,7 +119,7 @@ def register_reload_service(hass: HomeAssistant) -> None:
         return
 
     async def handle_reload(call):
-        _LOGGER.warning("Reload Dwains Dashboard Configuration")
+        _LOGGER.info("Reloading Dwains Dashboard configuration")
         await reload_configuration(hass)
 
     hass.services.async_register(DOMAIN, "reload", handle_reload)
@@ -308,7 +308,7 @@ async def process_yaml(hass: HomeAssistant, config_entry):
         hass.bus.async_fire("dwains_dashboard_reload")
 
 async def reload_configuration(hass):
-    _LOGGER.warning('Reload YAML configuration files...!')
+    _LOGGER.info("Reloading Dwains Dashboard YAML configuration")
 
     processor = get_yaml_processor(hass)
     processor.more_pages.clear()
