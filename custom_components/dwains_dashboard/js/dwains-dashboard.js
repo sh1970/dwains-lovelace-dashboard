@@ -568,7 +568,7 @@
         z-index: 8;
       }
 
-      @media only screen and (max-width: 768px) {
+      @media only screen and (max-width: 871px) {
         #dwains_dashboard {
           padding-top: 1px;
           padding-bottom: calc(5rem + env(safe-area-inset-bottom));
@@ -6651,7 +6651,7 @@
             /* User has the sidebar hidden so always show the button */
             display: block !important;
         }
-        @media only screen and (max-width: 768px) {
+        @media only screen and (max-width: 871px) {
             :host {
                 position: relative;
                 bottom: auto;
@@ -7256,7 +7256,7 @@
     color: var(--primary-text-color);
   }
 
-  @media all and (max-width: 768px) {
+  @media all and (max-width: 871px) {
     :host {
       box-shadow: 0 -1px 14px rgba(0, 0, 0, 0.065);
     }

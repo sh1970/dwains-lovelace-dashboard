@@ -51,7 +51,7 @@
         ':host{display:block;margin-top:calc(-1 * var(--dd-lovelace-header-offset,0px))}' +
         '#dwains_navigation{position:sticky;top:0;z-index:8}' +
         '#dwains_dashboard{margin:0 auto;font-family:"Open Sans",sans-serif;padding-top:10px;padding-bottom:50px}' +
-        "@media only screen and (max-width:768px){" +
+        "@media only screen and (max-width:871px){" +
         "#dwains_navigation{position:fixed;left:0;right:0;top:auto;bottom:0;z-index:30}" +
         ":host{display:block}" +
         "#dwains_dashboard{padding-top:1px;padding-bottom:calc(5rem + env(safe-area-inset-bottom))}}";

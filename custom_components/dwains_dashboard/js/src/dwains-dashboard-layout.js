@@ -46,7 +46,7 @@ class DwainsDashboardLayout extends LitElement {
         z-index: 8;
       }
 
-      @media only screen and (max-width: 768px) {
+      @media only screen and (max-width: 871px) {
         #dwains_dashboard {
           padding-top: 1px;
           padding-bottom: calc(5rem + env(safe-area-inset-bottom));

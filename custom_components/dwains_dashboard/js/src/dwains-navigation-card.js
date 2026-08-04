@@ -84,7 +84,7 @@ class DwainsNavigationCard extends LitElement {
             /* User has the sidebar hidden so always show the button */
             display: block !important;
         }
-        @media only screen and (max-width: 768px) {
+        @media only screen and (max-width: 871px) {
             :host {
                 position: relative;
                 bottom: auto;
