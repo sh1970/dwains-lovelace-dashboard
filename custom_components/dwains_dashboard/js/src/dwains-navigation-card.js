@@ -9,6 +9,7 @@ const { ReloadableLoadOwner } = require('./reloadable-load-owner');
 const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
 const { websocketReadStore } = require('./websocket-read-store');
 const { defineDwainsElement } = require('./custom-element-registration');
+const { VisualViewportNavigationOwner } = require('./visual-viewport-navigation');
 const {
   createNavigationActiveState,
   morePageRoutePath,
@@ -84,22 +85,18 @@ class DwainsNavigationCard extends LitElement {
             /* User has the sidebar hidden so always show the button */
             display: block !important;
         }
-        @media only screen and (max-width: 871px) {
-            :host {
-                position: relative;
-                bottom: auto;
-                top: auto;
-                padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-            }
+        :host([mobile-navigation]) {
+            position: relative;
+            bottom: auto;
+            top: auto;
+            padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
-        @media (max-width: 871px) {
-            .mainNavItems div span {
-                display: none;
-            }
-            .toggle-sidebar {
-                display: block;
-                padding: 0.75rem;
-            }
+        :host([compact-navigation]) .mainNavItems div span {
+            display: none;
+        }
+        :host([compact-navigation]) .toggle-sidebar {
+            display: block;
+            padding: 0.75rem;
         }
         `, subtleNavigationStyles(css)];
       }
@@ -138,6 +135,7 @@ class DwainsNavigationCard extends LitElement {
         this.isLoading = true; // Start met laden aangeven
         this._subscriptions = new EventSubscriptionOwner();
         this._listeners = new EventListenerOwner();
+        this._viewportNavigation = new VisualViewportNavigationOwner();
         this._loads = new ReloadableLoadOwner((context) => this._loadConfiguration(context));
         this._navigationGeneration = 0;
         this._morePageMetadataChanged = (event) => {
@@ -180,6 +178,7 @@ class DwainsNavigationCard extends LitElement {
 
       connectedCallback() {
         super.connectedCallback();
+        this._viewportNavigation.connect(this);
         this._subscriptions.connect();
         this._listeners.listen('location-changed', window, 'location-changed', this._routeChanged);
         this._listeners.listen('popstate', window, 'popstate', this._routeChanged);
@@ -203,6 +202,7 @@ class DwainsNavigationCard extends LitElement {
 
       disconnectedCallback() {
         super.disconnectedCallback();
+        this._viewportNavigation.disconnect();
         this._subscriptions.disconnect();
         this._listeners.disconnect();
         this._navigationGeneration += 1;

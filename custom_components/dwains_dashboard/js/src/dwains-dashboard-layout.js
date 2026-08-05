@@ -46,22 +46,17 @@ class DwainsDashboardLayout extends LitElement {
         z-index: 8;
       }
 
-      @media only screen and (max-width: 871px) {
-        #dwains_dashboard {
-          padding-top: 1px;
-          padding-bottom: calc(5rem + env(safe-area-inset-bottom));
-        }
-        :host {
-          display: block;
-        }
-        #dwains_navigation {
-          position: fixed;
-          left: 0;
-          right: 0;
-          top: auto;
-          bottom: 0;
-          z-index: 30;
-        }
+      :host([mobile-navigation]) #dwains_dashboard {
+        padding-top: 1px;
+        padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+      }
+      :host([mobile-navigation]) #dwains_navigation {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: auto;
+        bottom: 0;
+        z-index: 30;
       }
     `;
   }

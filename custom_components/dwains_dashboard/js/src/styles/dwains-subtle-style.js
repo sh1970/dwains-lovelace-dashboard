@@ -75,10 +75,8 @@ export const subtleNavigationStyles = (css) => css`
     color: var(--primary-text-color);
   }
 
-  @media all and (max-width: 871px) {
-    :host {
-      box-shadow: 0 -1px 14px rgba(0, 0, 0, 0.065);
-    }
+  :host([mobile-navigation]) {
+    box-shadow: 0 -1px 14px rgba(0, 0, 0, 0.065);
   }
 
 `;

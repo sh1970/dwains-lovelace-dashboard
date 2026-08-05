@@ -652,7 +652,7 @@ const translations = {
             disable_all: 'Deaktiviere alle Entitäten',
             hide_all: 'Blende alle Entitäten aus',
             exclude: 'Schließe Entität in DD aus',     
-            hide: 'Blende Entität in DD aus',       
+            hide: 'Blende Entität in DD aus',
             hide_in_area: 'Blende Entität in Area aus',
             unhide_in_area: 'Blende Entität in Area ein',
             unhide: 'Blende Entität in DD ein',       
