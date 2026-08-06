@@ -554,6 +554,8 @@
         `:void 0}}p("dwains-create-custom-card-card",u)},5142(e,t,i){"use strict";var a=i(6684);const{defineDwainsElement:r}=i(572),{LovelaceHeaderOwner:o}=i(2313);class n extends a.WF{constructor(){super(),this._headerOwner=new o}connectedCallback(){super.connectedCallback(),this._headerOwner.connect(this)}disconnectedCallback(){super.disconnectedCallback(),this._headerOwner.disconnect()}setConfig(e){}static get properties(){return{hass:{attribute:!1},cards:{type:Array}}}static get styles(){return a.AH`
       :host {
         display: block;
+        --dd-mobile-navigation-height: 2.75rem;
+        --dd-mobile-navigation-content-gap: 0.5rem;
         margin-top: calc(-1 * var(--dd-lovelace-header-offset, 0px));
       }
       #dwains_dashboard {
@@ -570,7 +572,11 @@
 
       :host([mobile-navigation]) #dwains_dashboard {
         padding-top: 1px;
-        padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+        padding-bottom: calc(
+          var(--dd-mobile-navigation-height) +
+          var(--dd-mobile-navigation-content-gap) +
+          env(safe-area-inset-bottom)
+        );
       }
       :host([mobile-navigation]) #dwains_navigation {
         position: fixed;
@@ -6610,6 +6616,8 @@
             padding: 0.25rem;
             justify-content: space-between;
             overflow-x: scroll;
+            overscroll-behavior-x: contain;
+            touch-action: pan-x;
             scrollbar-width: none;
         }
         .mainNavItems::-webkit-scrollbar {
@@ -6618,33 +6626,65 @@
         .mainNavItems::before, .mainNavItems::after {
             content: ''; /* Insert space before the first item and after the last one */
         }
-        .mainNavItems div {
+        .mainNavItems .nav-item {
             padding: 0.5rem;
             color: var(--primary-text-color);
             position: relative;
             text-align: center;
             display: grid;
             cursor: pointer;
+            appearance: none;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            font: inherit;
+            line-height: normal;
+            touch-action: pan-x;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
-        .mainNavItems div span {
+        .mainNavItems .nav-item span {
             text-transform: capitalize;
         }
-        .mainNavItems div.active {
+        .mainNavItems .nav-item.active {
             color: var(--sidebar-selected-icon-color);
+        }
+        .mainNavItems .nav-item:focus-visible,
+        .toggle-sidebar:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: -2px;
         }
 
         .dwains-dashboard-nav {
             display: flex;
+            isolation: isolate;
+            pointer-events: auto;
+            touch-action: pan-x;
         }
         .toggle-sidebar {
             padding: 1.35rem;
             background: var(--secondary-background-color);
             display: none;
             cursor: pointer;
+            appearance: none;
+            border: 0;
+            outline: 0;
+            color: var(--primary-text-color);
+            font: inherit;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
         .sidebar-always_hidden {
             /* User has the sidebar hidden so always show the button */
             display: block !important;
+        }
+        :host([compact-navigation]) .mainNavItems .nav-item span {
+            display: none;
+        }
+        :host([compact-navigation]) .toggle-sidebar {
+            display: block;
+            padding: 0.75rem;
         }
         :host([mobile-navigation]) {
             position: relative;
@@ -6652,68 +6692,102 @@
             top: auto;
             padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
-        :host([compact-navigation]) .mainNavItems div span {
-            display: none;
+        :host([mobile-navigation]) .dwains-dashboard-nav {
+            min-height: var(--dd-mobile-navigation-height, 2.75rem);
         }
-        :host([compact-navigation]) .toggle-sidebar {
-            display: block;
-            padding: 0.75rem;
+        :host([mobile-navigation]) .mainNavItems {
+            align-items: flex-start;
+            padding: 0 0.125rem;
         }
-        `,(0,s.YV)(a.AH)]}static get properties(){return{_hass:{type:Object},config:{type:Object},currentPath:{type:String},configuration:{type:Object},isLoading:{type:Boolean}}}set hass(e){const t=p(this._hass,e);this._hass=e;const i=w.get($(e));i&&(this.configuration=i,this.isLoading=!1),t&&this.isConnected&&(this._subscriptions.disconnect(),this._subscriptions.connect(),this.isLoading=!0),this.isConnected&&(this.isLoading||t)&&this._startNavigation(t)}constructor(){super(),this.currentPath=b(document.location),this.isLoading=!0,this._subscriptions=new d,this._listeners=new l,this._viewportNavigation=new g,this._loads=new c(e=>this._loadConfiguration(e)),this._navigationGeneration=0,this._morePageMetadataChanged=e=>{const t=e.detail?.page;if(!t?.foldername)return;const i=$(this._hass);if(i&&"boolean"==typeof t.show_in_navbar){let e=x.get(i);e||(e=new Map,x.set(i,e)),e.set(t.foldername,t.show_in_navbar)}const a=this.configuration||{devices:{},more_pages:{}};this.configuration={...a,more_pages:{...a.more_pages||{},[t.foldername]:{...a.more_pages?.[t.foldername]||{},...t}}},i&&w.set(i,this.configuration),this.isLoading=!1,this.requestUpdate()},this._routeChanged=()=>{this.currentPath=b(document.location,this.currentPath),this.requestUpdate()}}connectedCallback(){super.connectedCallback(),this._viewportNavigation.connect(this),this._subscriptions.connect(),this._listeners.listen("location-changed",window,"location-changed",this._routeChanged),this._listeners.listen("popstate",window,"popstate",this._routeChanged),this._listeners.listen("more-page-metadata",window,v,this._morePageMetadataChanged),this._listeners.listen("more-page-saved",window,y,this._morePageMetadataChanged),this._listeners.connect(),this._hass&&this._startNavigation()}disconnectedCallback(){super.disconnectedCallback(),this._viewportNavigation.disconnect(),this._subscriptions.disconnect(),this._listeners.disconnect(),this._navigationGeneration+=1,this._loads.invalidate(),this._navigationPromise=void 0,this._navigationConnection=void 0,this.isLoading=!0}_startNavigation(e=!1){const t=h(this._hass);if(this._navigationConnection===t&&this._navigationPromise)return this._navigationPromise;const i=++this._navigationGeneration;this._navigationConnection=t;const a=(e?this._loads.reload():this.loadConfig()).then(()=>{if(this.isConnected&&i===this._navigationGeneration&&h(this._hass)===t)return this._subscribeNavigation()}).catch(e=>{console.error("Error loading navigation:",e),i===this._navigationGeneration&&(this.isLoading=!1)}).finally(()=>{this._navigationPromise===a&&(this._navigationPromise=void 0)});return this._navigationPromise=a,a}loadConfig(){return this._loads.load()}async _loadConfiguration({isCurrent:e=()=>!0}={}){const t=this._hass,i=h(t),a=await u.readPreferred(t,{type:"dwains_dashboard/navigation/get"},{type:"dwains_dashboard/configuration/get"},{capability:"dashboard-read-slices"});if(!e()||h(this._hass)!==i)return;let r=a;const o=$(t),n=o&&x.get(o);for(const[e,t]of n||[]){const i=r.more_pages?.[e]||{};i.show_in_navbar===t?n.delete(e):r={...r,more_pages:{...r.more_pages||{},[e]:{...i,foldername:e,show_in_navbar:t}}}}n&&!n.size&&x.delete(o),this.configuration=r,o&&w.set(o,r),this.isLoading=!1,this.requestUpdate()}_subscribeNavigation(){return this._subscriptions.subscribeEvent("navigation",this._hass,"dwains_dashboard_navigation_card_reload",()=>{u.invalidate(this._hass,{type:"dwains_dashboard/configuration/get"}),u.invalidate(this._hass,{type:"dwains_dashboard/navigation/get"}),this._reloadCard().catch(e=>{console.error("Error reloading navigation:",e)})})}async _reloadCard(){console.log("Reloading navigation card"),await this._loads.reload(),this.requestUpdate()}_menuClick(e){const t=e.currentTarget.path;(0,r.navigate)(window,t)&&(this.currentPath=b(document.location,t)),this.requestUpdate()}_toggleSidebarClick(){(0,o.fireEvent)("hass-toggle-menu",{open:!0},this)}render(){const e=this.configuration||{devices:{},more_pages:{}},t=Object.entries(e.more_pages||{}).sort(function(e,t){let i=e[1]&&e[1].sort_order?e[1].sort_order:99,a=t[1]&&t[1].sort_order?t[1].sort_order:99;return i==a?0:i>a?1:-1}),i=_({currentPath:b(document.location,this.currentPath),fallbackHash:window.location.hash,devices:e.devices,morePages:e.more_pages});return a.qy`
-            <div class="dwains-dashboard-nav">
-                <div
+        :host([mobile-navigation]) .mainNavItems .nav-item {
+            box-sizing: border-box;
+            min-width: var(--dd-mobile-navigation-height, 2.75rem);
+            height: var(--dd-mobile-navigation-control-height, 2.375rem);
+            margin-top: var(--dd-mobile-navigation-top-gap, 0.375rem);
+            padding: 0.1875rem 0.5rem;
+            place-items: center;
+        }
+        :host([mobile-navigation]) .mainNavItems ha-icon,
+        :host([mobile-navigation]) .toggle-sidebar ha-icon {
+            --mdc-icon-size: var(--dd-mobile-navigation-icon-size, 2rem);
+            width: var(--dd-mobile-navigation-icon-size, 2rem);
+            height: var(--dd-mobile-navigation-icon-size, 2rem);
+        }
+        :host([mobile-navigation]) .toggle-sidebar {
+            box-sizing: border-box;
+            width: var(--dd-mobile-navigation-height, 2.75rem);
+            height: var(--dd-mobile-navigation-control-height, 2.375rem);
+            margin-top: var(--dd-mobile-navigation-top-gap, 0.375rem);
+            padding: 0.1875rem 0.375rem;
+        }
+        `,(0,s.YV)(a.AH)]}static get properties(){return{_hass:{type:Object},config:{type:Object},currentPath:{type:String},configuration:{type:Object},isLoading:{type:Boolean}}}set hass(e){const t=p(this._hass,e);this._hass=e;const i=w.get($(e));i&&(this.configuration=i,this.isLoading=!1),t&&this.isConnected&&(this._subscriptions.disconnect(),this._subscriptions.connect(),this.isLoading=!0),this.isConnected&&(this.isLoading||t)&&this._startNavigation(t)}constructor(){super(),this.currentPath=b(document.location),this.isLoading=!0,this._subscriptions=new d,this._listeners=new l,this._viewportNavigation=new g,this._loads=new c(e=>this._loadConfiguration(e)),this._navigationGeneration=0,this._morePageMetadataChanged=e=>{const t=e.detail?.page;if(!t?.foldername)return;const i=$(this._hass);if(i&&"boolean"==typeof t.show_in_navbar){let e=x.get(i);e||(e=new Map,x.set(i,e)),e.set(t.foldername,t.show_in_navbar)}const a=this.configuration||{devices:{},more_pages:{}};this.configuration={...a,more_pages:{...a.more_pages||{},[t.foldername]:{...a.more_pages?.[t.foldername]||{},...t}}},i&&w.set(i,this.configuration),this.isLoading=!1,this.requestUpdate()},this._routeChanged=()=>{this.currentPath=b(document.location,this.currentPath),this.requestUpdate()}}connectedCallback(){super.connectedCallback(),this._viewportNavigation.connect(this),this._subscriptions.connect(),this._listeners.listen("location-changed",window,"location-changed",this._routeChanged),this._listeners.listen("popstate",window,"popstate",this._routeChanged),this._listeners.listen("more-page-metadata",window,v,this._morePageMetadataChanged),this._listeners.listen("more-page-saved",window,y,this._morePageMetadataChanged),this._listeners.connect(),this._hass&&this._startNavigation()}disconnectedCallback(){super.disconnectedCallback(),this._viewportNavigation.disconnect(),this._subscriptions.disconnect(),this._listeners.disconnect(),this._navigationGeneration+=1,this._loads.invalidate(),this._navigationPromise=void 0,this._navigationConnection=void 0,this.isLoading=!0}_startNavigation(e=!1){const t=h(this._hass);if(this._navigationConnection===t&&this._navigationPromise)return this._navigationPromise;const i=++this._navigationGeneration;this._navigationConnection=t;const a=(e?this._loads.reload():this.loadConfig()).then(()=>{if(this.isConnected&&i===this._navigationGeneration&&h(this._hass)===t)return this._subscribeNavigation()}).catch(e=>{console.error("Error loading navigation:",e),i===this._navigationGeneration&&(this.isLoading=!1)}).finally(()=>{this._navigationPromise===a&&(this._navigationPromise=void 0)});return this._navigationPromise=a,a}loadConfig(){return this._loads.load()}async _loadConfiguration({isCurrent:e=()=>!0}={}){const t=this._hass,i=h(t),a=await u.readPreferred(t,{type:"dwains_dashboard/navigation/get"},{type:"dwains_dashboard/configuration/get"},{capability:"dashboard-read-slices"});if(!e()||h(this._hass)!==i)return;let r=a;const o=$(t),n=o&&x.get(o);for(const[e,t]of n||[]){const i=r.more_pages?.[e]||{};i.show_in_navbar===t?n.delete(e):r={...r,more_pages:{...r.more_pages||{},[e]:{...i,foldername:e,show_in_navbar:t}}}}n&&!n.size&&x.delete(o),this.configuration=r,o&&w.set(o,r),this.isLoading=!1,this.requestUpdate()}_subscribeNavigation(){return this._subscriptions.subscribeEvent("navigation",this._hass,"dwains_dashboard_navigation_card_reload",()=>{u.invalidate(this._hass,{type:"dwains_dashboard/configuration/get"}),u.invalidate(this._hass,{type:"dwains_dashboard/navigation/get"}),this._reloadCard().catch(e=>{console.error("Error reloading navigation:",e)})})}async _reloadCard(){console.log("Reloading navigation card"),await this._loads.reload(),this.requestUpdate()}_stopNavigationEvent(e){e.stopPropagation()}_menuClick(e){e.preventDefault(),e.stopPropagation();const t=e.currentTarget.path;(0,r.navigate)(window,t)&&(this.currentPath=b(document.location,t)),this.requestUpdate()}_toggleSidebarClick(){(0,o.fireEvent)("hass-toggle-menu",{open:!0},this)}render(){const e=this.configuration||{devices:{},more_pages:{}},t=Object.entries(e.more_pages||{}).sort(function(e,t){let i=e[1]&&e[1].sort_order?e[1].sort_order:99,a=t[1]&&t[1].sort_order?t[1].sort_order:99;return i==a?0:i>a?1:-1}),i=_({currentPath:b(document.location,this.currentPath),fallbackHash:window.location.hash,devices:e.devices,morePages:e.more_pages});return a.qy`
+            <div
+                class="dwains-dashboard-nav"
+                @pointerdown=${this._stopNavigationEvent}
+                @pointerup=${this._stopNavigationEvent}
+                @pointercancel=${this._stopNavigationEvent}
+                @click=${this._stopNavigationEvent}
+            >
+                <button
+                    type="button"
                     @click=${this._toggleSidebarClick}
                     class="toggle-sidebar sidebar-${this._hass.dockedSidebar}"
+                    aria-label=${this._hass.localize?.("ui.common.menu")||"Menu"}
                 >
                     <ha-icon icon="${"mdi:menu"}"></ha-icon>
-                </div>
+                </button>
                 <div class="mainNavItems">
-                    <div
-                        class="${i.home?"active":""}"
+                    <button
+                        type="button"
+                        class="nav-item ${i.home?"active":""}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/home"}
                     >
                         <ha-icon icon="${"mdi:home"}"></ha-icon>
                         <span>${(0,n.A)(this._hass,"home.title")}</span>
-                    </div>
-                    <div
-                        class="${i.devices?"active":""}"
+                    </button>
+                    <button
+                        type="button"
+                        class="nav-item ${i.devices?"active":""}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/devices"}
                     >
                         <ha-icon icon="${"mdi:format-list-bulleted-type"}"></ha-icon>
                         <span>${(0,n.A)(this._hass,"device.title_plural")}</span>
-                    </div>
+                    </button>
                     ${Object.entries(e.devices||{}).map(([e,t])=>a.qy`
                             ${t.show_in_navbar?a.qy`
-                                <div
-                                    class="${i.device(e)?"active":""}"
+                                <button
+                                    type="button"
+                                    class="nav-item ${i.device(e)?"active":""}"
                                     @click=${this._menuClick}
                                     .path=${"/dwains-dashboard/devices#"+e}
                                 >
                                     <ha-icon icon="${t.icon}"></ha-icon>
                                     <span>${(0,n.A)(this._hass,"device."+e)}</span>
-                                </div>`:""}
+                                </button>`:""}
                         `)}
                     ${t.map(([e,t])=>a.qy`
                             ${t.show_in_navbar?a.qy`
-                                <div
-                                    class="${i.morePage(e)?"active":""}"
+                                <button
+                                    type="button"
+                                    class="nav-item ${i.morePage(e)?"active":""}"
                                     @click=${this._menuClick}
                                     .path=${f(e)}
                                 >
                                     <ha-icon icon="${t.icon}"></ha-icon>
                                     <span>${t.name}</span>
-                                </div>`:""}
+                                </button>`:""}
                         `)}
-                    <div
-                        class="${i.morePages?"active":""}"
+                    <button
+                        type="button"
+                        class="nav-item ${i.morePages?"active":""}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/more_page"}
                     >
                         <ha-icon icon="${"mdi:view-grid-outline"}"></ha-icon>
                         <span>${(0,n.A)(this._hass,"more.title")}</span>
-                    </div>
+                    </button>
                 </div>
             </div>
         `}}m("dwainsboard-navigation-card",k),window.dispatchEvent(new CustomEvent("dwains-dashboard-runtime-ready"))},7863(e,t,i){"use strict";var a=i(6684);const{EventSubscriptionOwner:r}=i(7450),{ReloadableLoadOwner:o}=i(1786),{hassConnectionIdentity:n,hasHassConnectionChanged:s}=i(4776),{defineDwainsElement:d}=i(572),{websocketReadStore:l}=i(9012),c=Object.freeze({type:"dwains_dashboard_notification/get"});class h extends a.WF{static styles=a.AH`
@@ -7229,20 +7303,20 @@
     background: var(--dd-subtle-surface);
   }
 
-  :host .mainNavItems div {
+  :host .mainNavItems .nav-item {
     padding: 0.52rem 0.78rem;
     border-radius: var(--dd-subtle-radius-small);
     color: var(--secondary-text-color);
     transition: background-color 150ms ease, color 150ms ease;
   }
 
-  :host .mainNavItems div.active {
+  :host .mainNavItems .nav-item.active {
     color: var(--primary-color);
     background: var(--dd-subtle-muted);
     box-shadow: none;
   }
 
-  :host .mainNavItems div:hover {
+  :host .mainNavItems .nav-item:hover {
     background: var(--dd-subtle-muted-hover);
     color: var(--primary-text-color);
   }

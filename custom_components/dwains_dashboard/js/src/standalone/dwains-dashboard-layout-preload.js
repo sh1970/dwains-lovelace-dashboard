@@ -48,11 +48,11 @@
       const sr = this.attachShadow({ mode: "open" });
       const style = document.createElement("style");
       style.textContent =
-        ':host{display:block;margin-top:calc(-1 * var(--dd-lovelace-header-offset,0px))}' +
+        ':host{display:block;--dd-mobile-navigation-height:2.75rem;--dd-mobile-navigation-content-gap:0.5rem;margin-top:calc(-1 * var(--dd-lovelace-header-offset,0px))}' +
         '#dwains_navigation{position:sticky;top:0;z-index:8}' +
         '#dwains_dashboard{margin:0 auto;font-family:"Open Sans",sans-serif;padding-top:10px;padding-bottom:50px}' +
         ":host([mobile-navigation]) #dwains_navigation{position:fixed;left:0;right:0;top:auto;bottom:0;z-index:30}" +
-        ":host([mobile-navigation]) #dwains_dashboard{padding-top:1px;padding-bottom:calc(5rem + env(safe-area-inset-bottom))}";
+        ":host([mobile-navigation]) #dwains_dashboard{padding-top:1px;padding-bottom:calc(var(--dd-mobile-navigation-height) + var(--dd-mobile-navigation-content-gap) + env(safe-area-inset-bottom))}";
       sr.appendChild(style);
       this._navigationHost = document.createElement("div");
       this._navigationHost.id = "dwains_navigation";

@@ -32,6 +32,8 @@ class DwainsDashboardLayout extends LitElement {
     return css`
       :host {
         display: block;
+        --dd-mobile-navigation-height: 2.75rem;
+        --dd-mobile-navigation-content-gap: 0.5rem;
         margin-top: calc(-1 * var(--dd-lovelace-header-offset, 0px));
       }
       #dwains_dashboard {
@@ -48,7 +50,11 @@ class DwainsDashboardLayout extends LitElement {
 
       :host([mobile-navigation]) #dwains_dashboard {
         padding-top: 1px;
-        padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+        padding-bottom: calc(
+          var(--dd-mobile-navigation-height) +
+          var(--dd-mobile-navigation-content-gap) +
+          env(safe-area-inset-bottom)
+        );
       }
       :host([mobile-navigation]) #dwains_navigation {
         position: fixed;

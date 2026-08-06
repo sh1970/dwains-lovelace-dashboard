@@ -49,6 +49,8 @@ class DwainsNavigationCard extends LitElement {
             padding: 0.25rem;
             justify-content: space-between;
             overflow-x: scroll;
+            overscroll-behavior-x: contain;
+            touch-action: pan-x;
             scrollbar-width: none;
         }
         .mainNavItems::-webkit-scrollbar {
@@ -57,33 +59,65 @@ class DwainsNavigationCard extends LitElement {
         .mainNavItems::before, .mainNavItems::after {
             content: ''; /* Insert space before the first item and after the last one */
         }
-        .mainNavItems div {
+        .mainNavItems .nav-item {
             padding: 0.5rem;
             color: var(--primary-text-color);
             position: relative;
             text-align: center;
             display: grid;
             cursor: pointer;
+            appearance: none;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            font: inherit;
+            line-height: normal;
+            touch-action: pan-x;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
-        .mainNavItems div span {
+        .mainNavItems .nav-item span {
             text-transform: capitalize;
         }
-        .mainNavItems div.active {
+        .mainNavItems .nav-item.active {
             color: var(--sidebar-selected-icon-color);
+        }
+        .mainNavItems .nav-item:focus-visible,
+        .toggle-sidebar:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: -2px;
         }
 
         .dwains-dashboard-nav {
             display: flex;
+            isolation: isolate;
+            pointer-events: auto;
+            touch-action: pan-x;
         }
         .toggle-sidebar {
             padding: 1.35rem;
             background: var(--secondary-background-color);
             display: none;
             cursor: pointer;
+            appearance: none;
+            border: 0;
+            outline: 0;
+            color: var(--primary-text-color);
+            font: inherit;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
         .sidebar-always_hidden {
             /* User has the sidebar hidden so always show the button */
             display: block !important;
+        }
+        :host([compact-navigation]) .mainNavItems .nav-item span {
+            display: none;
+        }
+        :host([compact-navigation]) .toggle-sidebar {
+            display: block;
+            padding: 0.75rem;
         }
         :host([mobile-navigation]) {
             position: relative;
@@ -91,12 +125,33 @@ class DwainsNavigationCard extends LitElement {
             top: auto;
             padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
-        :host([compact-navigation]) .mainNavItems div span {
-            display: none;
+        :host([mobile-navigation]) .dwains-dashboard-nav {
+            min-height: var(--dd-mobile-navigation-height, 2.75rem);
         }
-        :host([compact-navigation]) .toggle-sidebar {
-            display: block;
-            padding: 0.75rem;
+        :host([mobile-navigation]) .mainNavItems {
+            align-items: flex-start;
+            padding: 0 0.125rem;
+        }
+        :host([mobile-navigation]) .mainNavItems .nav-item {
+            box-sizing: border-box;
+            min-width: var(--dd-mobile-navigation-height, 2.75rem);
+            height: var(--dd-mobile-navigation-control-height, 2.375rem);
+            margin-top: var(--dd-mobile-navigation-top-gap, 0.375rem);
+            padding: 0.1875rem 0.5rem;
+            place-items: center;
+        }
+        :host([mobile-navigation]) .mainNavItems ha-icon,
+        :host([mobile-navigation]) .toggle-sidebar ha-icon {
+            --mdc-icon-size: var(--dd-mobile-navigation-icon-size, 2rem);
+            width: var(--dd-mobile-navigation-icon-size, 2rem);
+            height: var(--dd-mobile-navigation-icon-size, 2rem);
+        }
+        :host([mobile-navigation]) .toggle-sidebar {
+            box-sizing: border-box;
+            width: var(--dd-mobile-navigation-height, 2.75rem);
+            height: var(--dd-mobile-navigation-control-height, 2.375rem);
+            margin-top: var(--dd-mobile-navigation-top-gap, 0.375rem);
+            padding: 0.1875rem 0.375rem;
         }
         `, subtleNavigationStyles(css)];
       }
@@ -302,7 +357,13 @@ class DwainsNavigationCard extends LitElement {
         this.requestUpdate();
       }
 
+      _stopNavigationEvent(ev) {
+        ev.stopPropagation();
+      }
+
       _menuClick(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
         const path = ev.currentTarget.path;
         if (navigate(window, path)) {
           this.currentPath = navigationLocationPath(document.location, path);
@@ -329,66 +390,79 @@ class DwainsNavigationCard extends LitElement {
         });
 
         return html`
-            <div class="dwains-dashboard-nav">
-                <div
+            <div
+                class="dwains-dashboard-nav"
+                @pointerdown=${this._stopNavigationEvent}
+                @pointerup=${this._stopNavigationEvent}
+                @pointercancel=${this._stopNavigationEvent}
+                @click=${this._stopNavigationEvent}
+            >
+                <button
+                    type="button"
                     @click=${this._toggleSidebarClick}
                     class="toggle-sidebar sidebar-${this._hass.dockedSidebar}"
+                    aria-label=${this._hass.localize?.('ui.common.menu') || 'Menu'}
                 >
                     <ha-icon icon="${"mdi:menu"}"></ha-icon>
-                </div>
+                </button>
                 <div class="mainNavItems">
-                    <div
-                        class="${activeState.home ? 'active' : ''}"
+                    <button
+                        type="button"
+                        class="nav-item ${activeState.home ? 'active' : ''}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/home"}
                     >
                         <ha-icon icon="${"mdi:home"}"></ha-icon>
                         <span>${translateEngine(this._hass, 'home.title')}</span>
-                    </div>
-                    <div
-                        class="${activeState.devices ? 'active' : ''}"
+                    </button>
+                    <button
+                        type="button"
+                        class="nav-item ${activeState.devices ? 'active' : ''}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/devices"}
                     >
                         <ha-icon icon="${"mdi:format-list-bulleted-type"}"></ha-icon>
                         <span>${translateEngine(this._hass, 'device.title_plural')}</span>
-                    </div>
+                    </button>
                     ${Object.entries(configuration.devices || {}).map(([k,v]) =>
                         //, v["icon"]);
                         // k = path
                         html`
                             ${v["show_in_navbar"] ? html`
-                                <div
-                                    class="${activeState.device(k) ? 'active' : ''}"
+                                <button
+                                    type="button"
+                                    class="nav-item ${activeState.device(k) ? 'active' : ''}"
                                     @click=${this._menuClick}
                                     .path=${"/dwains-dashboard/devices#"+k}
                                 >
                                     <ha-icon icon="${v["icon"]}"></ha-icon>
                                     <span>${translateEngine(this._hass,'device.'+k)}</span>
-                                </div>`: ""}
+                                </button>`: ""}
                         `
                     )}
                     ${more_pages.map(([key, page]) =>
                         html`
                             ${page["show_in_navbar"] ? html`
-                                <div
-                                    class="${activeState.morePage(key) ? 'active' : ''}"
+                                <button
+                                    type="button"
+                                    class="nav-item ${activeState.morePage(key) ? 'active' : ''}"
                                     @click=${this._menuClick}
                                     .path=${morePageRoutePath(key)}
                                 >
                                     <ha-icon icon="${page["icon"]}"></ha-icon>
                                     <span>${page["name"]}</span>
-                                </div>`: ""}
+                                </button>`: ""}
                         `
                     )}
-                    <div
-                        class="${activeState.morePages ? 'active' : ''}"
+                    <button
+                        type="button"
+                        class="nav-item ${activeState.morePages ? 'active' : ''}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/more_page"}
                     >
                         <ha-icon icon="${"mdi:view-grid-outline"}"></ha-icon>
                         <span>${translateEngine(this._hass, 'more.title')}</span>
-                    </div>
+                    </button>
                 </div>
             </div>
         `;

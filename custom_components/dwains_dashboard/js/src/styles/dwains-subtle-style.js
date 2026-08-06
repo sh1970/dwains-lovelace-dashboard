@@ -57,20 +57,20 @@ export const subtleNavigationStyles = (css) => css`
     background: var(--dd-subtle-surface);
   }
 
-  :host .mainNavItems div {
+  :host .mainNavItems .nav-item {
     padding: 0.52rem 0.78rem;
     border-radius: var(--dd-subtle-radius-small);
     color: var(--secondary-text-color);
     transition: background-color 150ms ease, color 150ms ease;
   }
 
-  :host .mainNavItems div.active {
+  :host .mainNavItems .nav-item.active {
     color: var(--primary-color);
     background: var(--dd-subtle-muted);
     box-shadow: none;
   }
 
-  :host .mainNavItems div:hover {
+  :host .mainNavItems .nav-item:hover {
     background: var(--dd-subtle-muted-hover);
     color: var(--primary-text-color);
   }
