@@ -1,4 +1,12 @@
 import { LitElement, html, css } from 'lit';
+const { EventSubscriptionOwner } = require('./event-subscription-owner');
+const { ReloadableLoadOwner } = require('./reloadable-load-owner');
+const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
+const { defineDwainsElement } = require('./custom-element-registration');
+const { websocketReadStore } = require('./websocket-read-store');
+const NOTIFICATION_MESSAGE = Object.freeze({
+  type: 'dwains_dashboard_notification/get',
+});
 //Herschreven
 class DwainsNotificationCard extends LitElement {
   static styles = css`
@@ -65,49 +73,92 @@ class DwainsNotificationCard extends LitElement {
   }
 
   set hass(hass) {
+    const connectionChanged = hasHassConnectionChanged(this._hass, hass);
     this._hass = hass;
     this.requestUpdate();
+    if (connectionChanged && this.isConnected) {
+      this._subscriptions.disconnect();
+      this._subscriptions.connect();
+      this._notificationHass = undefined;
+    }
+    this._startNotifications(connectionChanged);
   }
 
   constructor() {
     super();
     this.notifications = [];
+    this._subscriptions = new EventSubscriptionOwner();
+    this._loads = new ReloadableLoadOwner((context) => this._loadNotifications(context));
   }
 
   connectedCallback() {
     super.connectedCallback();
-    if (!this._unsub) {
-      this._subscribeNotifications();
-      this._notificationsUpdated();
-    }
+    this._subscriptions.connect();
+    this._startNotifications();
+  }
+
+  _startNotifications(reload = false) {
+    const connection = hassConnectionIdentity(this._hass);
+    if (!this.isConnected || !this._hass || this._notificationHass === connection) return;
+    const hass = this._hass;
+    this._notificationHass = connection;
+    this._subscribeNotifications().catch((error) => {
+      if (this._notificationHass === connection) this._notificationHass = undefined;
+      console.error('Failed to subscribe to notification updates', error);
+    });
+    const load = reload ? this._loads.reload() : this._loads.load();
+    load.catch((error) => {
+      console.error('Failed to load notifications', error);
+    });
   }
 
   async _subscribeNotifications() {
-    if (!this._unsub) {
-      this._unsub = await this._hass.connection.subscribeEvents(() => this._notificationsUpdated(), 'dwains_dashboard_notifications_updated');
-    }
+    await this._subscriptions.subscribeEvent(
+      'notifications',
+      this._hass,
+      'dwains_dashboard_notifications_updated',
+      () => {
+        this._notificationsUpdated().catch((error) => {
+          console.error('Failed to refresh notifications', error);
+        });
+      },
+    );
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    if (this._unsub) {
-      Promise.resolve(this._unsub()).catch(() => {});
-      this._unsub = undefined;
-    }
+    this._notificationHass = undefined;
+    websocketReadStore.invalidate(this._hass, NOTIFICATION_MESSAGE);
+    this._loads.invalidate();
+    this._subscriptions.disconnect();
   }
 
-  async _notificationsUpdated() {
-    this.notifications = await this._hass.callWS({
-      type: 'dwains_dashboard_notification/get'
-    }) || [];
+  _notificationsUpdated() {
+    websocketReadStore.invalidate(this._hass, NOTIFICATION_MESSAGE);
+    return this._loads.reload();
+  }
+
+  async _loadNotifications({ isCurrent = () => true } = {}) {
+    const hass = this._hass;
+    const connection = hassConnectionIdentity(hass);
+    const notifications = await websocketReadStore.read(hass, NOTIFICATION_MESSAGE) || [];
+    if (!isCurrent()
+      || !this.isConnected
+      || hassConnectionIdentity(this._hass) !== connection) return;
+    this.notifications = notifications;
     this.requestUpdate();
   }
 
   _handleDismiss(notificationId) {
-    this._hass.callService('dwains_dashboard', 'notification_dismiss', {
+    const dismiss = this._hass.callService('dwains_dashboard', 'notification_dismiss', {
       notification_id: notificationId
     });
-    this._notificationsUpdated();
+    Promise.resolve(dismiss).catch((error) => {
+      console.error('Failed to dismiss Dwains Dashboard notification', error);
+    });
+    this._notificationsUpdated().catch((error) => {
+      console.error('Failed to refresh notifications after dismiss', error);
+    });
   }
 
   _renderNotification(notification) {
@@ -139,4 +190,4 @@ class DwainsNotificationCard extends LitElement {
   }
 }
 
-customElements.define('dwains-notification-card', DwainsNotificationCard);
+defineDwainsElement('dwains-notification-card', DwainsNotificationCard);

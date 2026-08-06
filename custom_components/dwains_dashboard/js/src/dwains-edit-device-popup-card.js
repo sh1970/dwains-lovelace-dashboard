@@ -1,14 +1,39 @@
-import { hass } from "card-tools/src/hass";
-import { css, html, LitElement } from 'lit-element';
+import { hass } from "./hass-compat";
+import { css, html, LitElement } from 'lit';
 import translateEngine from './translate-engine';
 import { closePopup } from "./helpers";
+const { websocketReadStore } = require('./websocket-read-store');
+const { ConnectedLoadOwner } = require('./connected-load-owner');
+const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
+const { defineDwainsElement } = require('./custom-element-registration');
 
-const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
-Promise.race(bases2).then(async () => {
-  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
+class DwainsEditDevicePopupCard extends LitElement {
+      constructor() {
+        super();
+        this._connectedLoadOwner = new ConnectedLoadOwner(
+          (context) => this._loadEditor(context),
+          {
+            reportError: (message, error) => console.error(message, error),
+            errorMessage: "Failed to load device-popup editor data",
+          },
+        );
+        this._configReady = false;
+      }
 
+      set hass(hass) {
+        const connectionChanged = hasHassConnectionChanged(this._hass, hass);
+        this._hass = hass;
+        if (connectionChanged) {
+          this._connectedLoadOwner.disconnect();
+          if (this.isConnected) this._connectedLoadOwner.connect();
+        }
+        this._startEditorIfReady();
+      }
 
-    class DwainsEditDevicePopupCard extends LitElement {
+      get hass() {
+        return this._hass;
+      }
+
       static get styles() {
         return [
           css`
@@ -177,11 +202,18 @@ Promise.race(bases2).then(async () => {
         }
       }
       setConfig(config) {
-        this.hass = hass();
+        // Keep transient editor state for the lifetime of this popup instance.
+        if (this._editorSessionInitialized) {
+          this._configReady = true;
+          this._startEditorIfReady();
+          return;
+        }
+        this._editorSessionInitialized = true;
+        if (!this.hass) this.hass = hass();
         this.mode = config.mode ? config.mode : 'dwains-dashboard-blueprint-select'; //Set default mode to hui-card-picker
         this.domain = config.domain;
         if(config.cardConfig){
-          const cardConfig = config.cardConfig;
+          const cardConfig = structuredClone(config.cardConfig);
           delete cardConfig["input_entity"];
           delete cardConfig["input_name"];
           this.cardConfig = cardConfig;
@@ -189,22 +221,37 @@ Promise.race(bases2).then(async () => {
           this.cardConfig = "";
         }
         this.existingCardEdit = config.existingCardEdit ? config.existingCardEdit : false;
+        this._configReady = true;
+        this._startEditorIfReady();
       }
-      async connectedCallback(){
+      connectedCallback(){
         super.connectedCallback();
-
-        await this._loadBlueprints();
+        this._connectedLoadOwner.connect();
+        this._startEditorIfReady();
       }
 
-      async _loadBlueprints(){
-        //Load blueprints
-        this.blueprints = await this.hass.callWS({
+      disconnectedCallback(){
+        super.disconnectedCallback();
+        this._connectedLoadOwner.disconnect();
+      }
+
+      _startEditorIfReady() {
+        if (!this._configReady || !this._hass) return;
+        this._connectedLoadOwner.ready();
+      }
+
+      async _loadEditor({ isCurrent }) {
+        const hass = this._hass;
+        const connection = hassConnectionIdentity(hass);
+        const blueprints = await websocketReadStore.read(hass, {
           type: 'dwains_dashboard/get_blueprints'
         });
+        if (!isCurrent() || hassConnectionIdentity(this._hass) !== connection) return;
+        this.blueprints = blueprints;
+      }
 
-        const ch = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
-        const c = await ch.createCardElement({ type: "button" });
-        await c.constructor.getConfigElement();
+      _loadBlueprints() {
+        return this._connectedLoadOwner.reload();
       }
       _switchMode(ev){
         const mode = ev.currentTarget.mode;
@@ -212,7 +259,7 @@ Promise.race(bases2).then(async () => {
         this.requestUpdate();
       }
       _removeCard(){
-        this.hass.connection.sendMessagePromise({
+        this.hass.callWS({
           type: 'dwains_dashboard/remove_device_popup',
           domain: this.domain,
         }).then(
@@ -227,12 +274,13 @@ Promise.race(bases2).then(async () => {
       }
       _handleDeleteBlueprintClicked(ev){
         const blueprint = ev.currentTarget.blueprint;
-        this.hass.connection.sendMessagePromise({
+        this.hass.callWS({
           type: 'dwains_dashboard/delete_blueprint',
           blueprint: blueprint
         }).then(
             (resp) => {
               console.log(resp);
+              websocketReadStore.invalidate(this.hass);
               this._loadBlueprints();
               this.requestUpdate();
             },
@@ -251,7 +299,7 @@ Promise.race(bases2).then(async () => {
         });
         //console.log(cardData);
         //Here parse it with websocket to my integration?
-        this.hass.connection.sendMessagePromise({
+        this.hass.callWS({
           type: 'dwains_dashboard/edit_device_popup',
           cardData: cardData,
           domain: this.domain,
@@ -269,7 +317,7 @@ Promise.race(bases2).then(async () => {
         this.installBlueprintYaml = e.target.value;
       }
       _handleInstallBlueprintClicked(ev) {
-        this.hass.connection.sendMessagePromise({
+        this.hass.callWS({
           type: 'dwains_dashboard/install_blueprint',
           yamlCode: JSON.stringify(this.installBlueprintYaml),
         }).then(
@@ -277,6 +325,7 @@ Promise.race(bases2).then(async () => {
               console.log(resp);
               if(resp["succesfull"]){
                 alert(this.hass.localize("ui.common.successfully_saved"));
+                websocketReadStore.invalidate(this.hass);
                 this._loadBlueprints();
                 this.requestUpdate();
               } else {
@@ -417,7 +466,5 @@ Promise.race(bases2).then(async () => {
           `;
         }
       }
-    }
-    customElements.define("dwains-edit-device-popup-card", DwainsEditDevicePopupCard);
-
-});
+}
+defineDwainsElement("dwains-edit-device-popup-card", DwainsEditDevicePopupCard);

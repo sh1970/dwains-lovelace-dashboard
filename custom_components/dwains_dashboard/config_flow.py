@@ -3,7 +3,11 @@ import json
 import os
 
 import voluptuous as vol
-import yaml
+
+from .const import DOMAIN
+from .configuration_runtime import get_configuration_runtime
+from .runtime_data import get_domain_data
+from .yaml_files import dump_yaml_file, load_yaml_file
 
 from homeassistant import config_entries
 from homeassistant.core import callback
@@ -45,7 +49,7 @@ AREA_VIEW_GROUPING_MODES = (
     AREA_VIEW_GROUPING_MODE_ENABLED,
     AREA_VIEW_GROUPING_MODE_DISABLED,
 )
-_TRANSLATION_CACHE = {}
+_TRANSLATION_CACHE_KEY = "translation_cache"
 FALLBACK_SENSOR_DEVICE_CLASSES = [
     "apparent_power",
     "aqi",
@@ -131,19 +135,17 @@ FALLBACK_BINARY_SENSOR_DEVICE_CLASSES = [
 
 
 def _read_settings(path):
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f) or {}
-        except Exception:  # corrupt/empty file -> treat as no settings
-            return {}
-    return {}
+    try:
+        return load_yaml_file(path) or {}
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        _LOGGER.exception("Failed to read dashboard settings from %s", path)
+        return {}
 
 
 def _write_settings(path, data):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    dump_yaml_file(path, data)
 
 
 def _nested_value(data, path):
@@ -173,6 +175,7 @@ def _load_translation_data(language_codes):
             with open(translation_path, "r", encoding="utf-8") as f:
                 translation_data = json.load(f)
         except Exception:
+            _LOGGER.exception("Failed to load dashboard translation %s", translation_path)
             continue
         if isinstance(translation_data, dict):
             translations.append(translation_data)
@@ -181,11 +184,13 @@ def _load_translation_data(language_codes):
 
 async def _async_translation_data(hass):
     language_codes = tuple(_translation_language_codes(hass))
-    if language_codes not in _TRANSLATION_CACHE:
-        _TRANSLATION_CACHE[language_codes] = await hass.async_add_executor_job(
+    domain_data = get_domain_data(hass)
+    translation_cache = domain_data.setdefault(_TRANSLATION_CACHE_KEY, {})
+    if language_codes not in translation_cache:
+        translation_cache[language_codes] = await hass.async_add_executor_job(
             _load_translation_data, language_codes
         )
-    return _TRANSLATION_CACHE[language_codes]
+    return translation_cache[language_codes]
 
 
 def _translation(translations, path, fallback):
@@ -352,7 +357,15 @@ class DwainsDashboardEditFlow(config_entries.OptionsFlow):
             header["area_floor_grouping_mode"] = _area_view_grouping_mode(
                 user_input.get("area_floor_grouping_mode", AREA_VIEW_GROUPING_MODE_CLIENT)
             )
-            await self.hass.async_add_executor_job(_write_settings, path, header)
+            configuration_runtime = get_configuration_runtime(self.hass)
+            async with configuration_runtime.mutation_lock:
+                configuration_runtime.clear_cache()
+                try:
+                    await self.hass.async_add_executor_job(
+                        _write_settings, path, header
+                    )
+                finally:
+                    configuration_runtime.clear_cache()
             self.hass.bus.async_fire("dwains_dashboard_homepage_card_reload")
             self.hass.bus.async_fire("dwains_dashboard_navigation_card_reload")
 

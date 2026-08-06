@@ -1,29 +1,39 @@
-import { provideHass } from "card-tools/src/hass";
-import { selectTree } from "card-tools/src/helpers";
-import { fireEvent } from "card-tools/src/event";
-import "card-tools/src/lovelace-element";
+import { provideHass } from "./hass-compat";
+import { selectTree } from "./card-tools-compat";
+import { fireEvent } from "./card-tools-compat";
+import { LitElement, html, css } from 'lit';
 import { createCardElementSafe } from './helpers';
 import { subtlePopupStyles } from './styles/dwains-subtle-style';
+const { loadCardHelpers } = require('./card-helpers-loader');
+const { CardBuildOwner } = require('./card-build-owner');
+const { popupHistoryController } = require('./popup-history-controller');
+const { handlePopupCardRebuild } = require('./popup-rebuild-policy');
+const { defineOwnedElement } = require('./custom-element-registration');
+const {
+  closeCardToolsPopup,
+  findCardToolsPopup,
+  findPopupRoot,
+  mountCardToolsPopup,
+} = require('./popup-host');
 
 export async function closePopUp() {
-  const root = document.querySelector("home-assistant") || document.querySelector("hc-root");
-  fireEvent("hass-more-info", {entityId: "."}, root);
-  const el = await selectTree(root, "$ card-tools-popup");
-
-  if(el)
-    el.closeDialog();
+  const root = findPopupRoot();
+  if (root) fireEvent("hass-more-info", {entityId: "."}, root);
+  return closeCardToolsPopup({ root, selectTree });
 }
 
-export async function popUp(title, card, large=false, style={}, fullscreen=false) {
+export async function popUp(title, card, large=false, style={}, fullscreen=false, recordHistory=true) {
   if(!customElements.get("card-tools-popup"))
   {
-    const LitElement = customElements.get('home-assistant-main')
-      ? Object.getPrototypeOf(customElements.get('home-assistant-main'))
-      : Object.getPrototypeOf(customElements.get('hui-view'));
-    const html = LitElement.prototype.html;
-    const css = LitElement.prototype.css;
-
       class CardToolsPopup extends LitElement {
+
+        constructor() {
+          super();
+          this._cardBuilds = new CardBuildOwner({
+            loadHelpers: loadCardHelpers,
+            createCard: createCardElementSafe,
+          });
+        }
 
         static get properties() {
           return {
@@ -41,24 +51,27 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
         }
 
         closeDialog() {
+          this._cardBuilds.invalidate();
           this.open = false;
-          try {
-            if(history.state && history.state.cardToolsPopup){
-              history.replaceState({cardToolsPopup: false}, "");
-            }
-          } catch (_) {}
+          popupHistoryController.markClosed();
         }
 
         async _makeCard() {
-          const helpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
           this.card = null;
-          try {
-            this.card = await createCardElementSafe(helpers, this._card, this.hass);
-          } catch (_) {}
-          if(this.card){
-            this.card.hass = this.hass;
+          const card = await this._cardBuilds.build(this._card, this.hass);
+          if(card){
+            this.card = card;
             this.requestUpdate();
           }
+        }
+
+        _handleCardRebuild(event) {
+          handlePopupCardRebuild(this._card, event, () => this._makeCard());
+        }
+
+        disconnectedCallback() {
+          super.disconnectedCallback();
+          this._cardBuilds.invalidate();
         }
 
         async _applyStyles() {
@@ -103,7 +116,7 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
               @closed=${this.closeDialog}
               .heading=${true}
               hideActions
-              @ll-rebuild=${this._makeCard}
+              @ll-rebuild=${this._handleCardRebuild}
             >
             ${this.fullscreen
               ? html`<div slot="heading"></div>`
@@ -213,51 +226,27 @@ export async function popUp(title, card, large=false, style={}, fullscreen=false
         }
 
       }
-    customElements.define("card-tools-popup", CardToolsPopup);
+    defineOwnedElement("card-tools-popup", CardToolsPopup);
   }
 
-  const root = document.querySelector("home-assistant") || document.querySelector("hc-root");
+  const root = findPopupRoot();
 
   if(!root) return;
-  let el = await selectTree(root, "$ card-tools-popup");
+  let el = await findCardToolsPopup({ root, selectTree });
   if(!el) {
     el = document.createElement("card-tools-popup");
-    const mi = root.shadowRoot.querySelector("ha-more-info-dialog");
-    if(mi)
-      root.shadowRoot.insertBefore(el,mi);
-    else
-      root.shadowRoot.appendChild(el);
-    provideHass(el);
+    if (!mountCardToolsPopup({ root, popup: el, provideHass })) return;
   }
 
-  if(!window._moreInfoDialogListener) {
-    const listener = async (ev) => {
-      if(ev.state && "cardToolsPopup" in ev.state) {
-        if(ev.state.cardToolsPopup) {
-          const {title, card, large, style, fullscreen} = ev.state.params;
-          popUp(title, card, large, style, fullscreen)
-        } else {
-          el.closeDialog();
-        }
-      }
-    }
+  popupHistoryController.connect(el, (params) => {
+    if (!params) return undefined;
+    const {title, card, large, style, fullscreen} = params;
+    return popUp(title, card, large, style, fullscreen, false);
+  });
 
-    window.addEventListener("popstate", listener);
-    window._moreInfoDialogListener = true;
+  if(recordHistory) {
+    popupHistoryController.recordOpen({title, card, large, style, fullscreen});
   }
-
-  history.replaceState( {
-      cardToolsPopup: false,
-    },
-    ""
-  );
-
-  history.pushState( {
-      cardToolsPopup: true,
-      params: {title, card, large, style, fullscreen},
-    },
-    ""
-  );
 
   el.showDialog(title, card, large, style, fullscreen);
 

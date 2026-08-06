@@ -57,28 +57,63 @@ export const subtleNavigationStyles = (css) => css`
     background: var(--dd-subtle-surface);
   }
 
-  :host .mainNavItems div {
+  :host .mainNavItems .nav-item {
     padding: 0.52rem 0.78rem;
     border-radius: var(--dd-subtle-radius-small);
     color: var(--secondary-text-color);
     transition: background-color 150ms ease, color 150ms ease;
   }
 
-  :host .mainNavItems div.active {
+  :host .mainNavItems .nav-item.active {
     color: var(--primary-color);
     background: var(--dd-subtle-muted);
     box-shadow: none;
   }
 
-  :host .mainNavItems div:hover {
+  :host .mainNavItems .nav-item:hover {
     background: var(--dd-subtle-muted-hover);
     color: var(--primary-text-color);
   }
 
-  @media all and (max-width: 1024px), all and (max-width: 812px) and (orientation: landscape) {
-    :host {
-      box-shadow: 0 -1px 14px rgba(0, 0, 0, 0.065);
-    }
+  :host([mobile-navigation]) {
+    box-shadow: 0 -1px 14px rgba(0, 0, 0, 0.065);
+  }
+
+`;
+
+export const subtleDetailViewStyles = (css) => css`
+  .dd-dashboard-style-refresh {
+    ${subtleVariables(css)}
+    color: var(--primary-text-color);
+  }
+
+  .dd-dashboard-style-refresh .dd-detail-view-header {
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 0.9rem 1rem;
+    background: var(--dd-subtle-surface);
+    border: 0;
+    border-radius: var(--dd-subtle-radius);
+    box-shadow: var(--dd-subtle-shadow);
+  }
+
+  .dd-dashboard-style-refresh .dd-detail-view-title {
+    position: sticky;
+    top: 0;
+    min-width: 0;
+  }
+
+  .dd-dashboard-style-refresh .dd-detail-view-title h1,
+  .dd-dashboard-style-refresh .dd-detail-view-title h2,
+  .dd-dashboard-style-refresh .dd-detail-view-title h3 {
+    margin: 0;
+    font-weight: 760;
+    letter-spacing: -0.02em;
+  }
+
+  .dd-dashboard-style-refresh .dd-detail-view-title .text-gray {
+    color: var(--secondary-text-color);
   }
 `;
 
@@ -240,24 +275,6 @@ export const subtleHomepageStyles = (css) => css`
   }
 
   ${subtleBackButtonStyles(css)}
-
-  .dd-dashboard-style-refresh .dd-area-view-header {
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    padding: 0.9rem 1rem;
-    background: var(--dd-subtle-surface);
-    border: 0;
-    border-radius: var(--dd-subtle-radius);
-    box-shadow: var(--dd-subtle-shadow);
-  }
-
-  .dd-dashboard-style-refresh .dd-area-view-title h1,
-  .dd-dashboard-style-refresh .dd-area-view-title h2,
-  .dd-dashboard-style-refresh .dd-area-view-title h3 {
-    font-weight: 760;
-    letter-spacing: -0.02em;
-  }
 
   .dd-dashboard-style-refresh .dd-area-view > h3,
   .dd-dashboard-style-refresh .dd-area-view .font-semibold.capitalize {

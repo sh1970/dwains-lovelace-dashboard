@@ -1,14 +1,11 @@
-import { hass } from "card-tools/src/hass";
-import { css, html, LitElement } from 'lit-element';
+import { hass } from "./hass-compat";
+import { css, html, LitElement } from 'lit';
 import translateEngine from './translate-engine';
 import { closePopup } from "./helpers";
+const { closeParentDropdown } = require('./dropdown-controller');
+const { defineDwainsElement } = require('./custom-element-registration');
 
-const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
-Promise.race(bases2).then(async () => {
-  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
-
-
-    class DwainsEditDeviceButtonCard extends LitElement {
+class DwainsEditDeviceButtonCard extends LitElement {
       static get styles() {
         return [
           css`
@@ -53,29 +50,13 @@ Promise.race(bases2).then(async () => {
         ]
       }
       setConfig(config) {
-        this.hass = hass();
+        if (!this.hass) this.hass = hass();
         this.device = config.device;
         this.icon = config.icon ? config.icon : "";
         this.showInNavbar = config.showInNavbar ? config.showInNavbar : false;
       }
-      async connectedCallback(){
+      connectedCallback(){
         super.connectedCallback();
-
-        //loadHaYamlEditor Start
-          if (customElements.get("ha-yaml-editor")) return;
-
-          // Load in ha-yaml-editor from developer-tools-service
-          const ppResolver = document.createElement("partial-panel-resolver");
-          const routes = (ppResolver).getRoutes([
-            {
-              component_name: "developer-tools",
-              url_path: "a",
-            },
-          ]);
-          await routes.routes.a.load();
-          const devToolsRouter = document.createElement("developer-tools-router");
-          await (devToolsRouter).routerOptions.routes.service.load();
-        //loadHaYamlEditor End
       }
       _iconPickerChange(ev){
         this.icon = ev.detail['value'];
@@ -84,7 +65,7 @@ Promise.race(bases2).then(async () => {
         this.showInNavbar = ev.target.checked;
       }
       _saveButton(ev){
-        if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+        closeParentDropdown(ev);
         ev.stopPropagation();
 
         if(this.showInNavbar && !this.icon){
@@ -92,7 +73,7 @@ Promise.race(bases2).then(async () => {
           return;
         }
 
-        this.hass.connection.sendMessagePromise({
+        this.hass.callWS({
           type: 'dwains_dashboard/edit_device_button',
           icon: this.icon,
           device: this.device,
@@ -135,7 +116,5 @@ Promise.race(bases2).then(async () => {
         </div>
         `;
       }
-    }
-    customElements.define("dwains-edit-device-button-card", DwainsEditDeviceButtonCard);
-
-});
+}
+defineDwainsElement("dwains-edit-device-button-card", DwainsEditDeviceButtonCard);

@@ -1,8 +1,4 @@
-import os
 import logging
-import json
-import io
-import time
 import voluptuous as vol
 import homeassistant.util.dt as dt_util
 
@@ -11,12 +7,13 @@ from typing import Any, Mapping, MutableMapping, Optional
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import TemplateError
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.entity import Entity, async_generate_entity_id
-from homeassistant.loader import bind_hass
+from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.util import slugify
 
 from .const import DOMAIN
+from .runtime_data import find_domain_data, get_domain_data
 
 ATTR_CREATED_AT = "created_at"
 ATTR_MESSAGE = "message"
@@ -31,6 +28,9 @@ EVENT_DWAINS_dashboard_NOTIFICATIONS_UPDATED = "dwains_dashboard_notifications_u
 SERVICE_CREATE = "notification_create"
 SERVICE_DISMISS = "notification_dismiss"
 SERVICE_MARK_READ = "notification_mark_read"
+NOTIFICATION_SERVICES = (SERVICE_CREATE, SERVICE_DISMISS, SERVICE_MARK_READ)
+_SERVICES_REGISTERED_KEY = "notification_services_registered"
+_WEBSOCKET_REGISTERED_KEY = "notification_websocket_registered"
 
 SCHEMA_SERVICE_CREATE = vol.Schema(
     {
@@ -51,18 +51,15 @@ STATUS_UNREAD = "unread"
 STATUS_READ = "read"
 
 #Notifications part
-@bind_hass
 def create(hass, message, title=None, notification_id=None):
     """Generate a notification."""
     hass.add_job(async_create, hass, message, title, notification_id)
 
-@bind_hass
 def dismiss(hass, notification_id):
     """Remove a notification."""
     hass.add_job(async_dismiss, hass, notification_id)
 
 @callback
-@bind_hass
 def async_create(
     hass: HomeAssistant,
     message: str,
@@ -83,7 +80,6 @@ def async_create(
     hass.async_create_task(hass.services.async_call(DOMAIN, SERVICE_CREATE, data))
 
 @callback
-@bind_hass
 def async_dismiss(hass: HomeAssistant, notification_id: str) -> None:
     """Remove a notification."""
     data = {ATTR_NOTIFICATION_ID: notification_id}
@@ -112,18 +108,31 @@ def websocket_get_notifications(
                         ATTR_CREATED_AT,
                     )
                 }
-                for data in hass.data[DOMAIN]["notifications"].values()
+                for data in get_domain_data(hass)["notifications"].values()
             ],
         )
     )
 #End notifications part
 
+
+def register_notifications_websocket(hass) -> None:
+    """Register the integration-scoped notification reader once."""
+    domain_data = get_domain_data(hass)
+    if domain_data.get(_WEBSOCKET_REGISTERED_KEY):
+        return
+    websocket_api.async_register_command(hass, websocket_get_notifications)
+    domain_data[_WEBSOCKET_REGISTERED_KEY] = True
+
+
 def notifications(hass, name):
-     #Notifications part setup
+    #Notifications part setup
     """Set up the dwains dashboard notification component."""
-    
+    domain_data = get_domain_data(hass)
+    if domain_data.get(_SERVICES_REGISTERED_KEY):
+        return
+
     dwains_dashboard_notifications: MutableMapping[str, MutableMapping] = OrderedDict()
-    hass.data[DOMAIN]["notifications"] = dwains_dashboard_notifications
+    domain_data["notifications"] = dwains_dashboard_notifications
 
     @callback
     def create_service(call):
@@ -217,5 +226,22 @@ def notifications(hass, name):
         DOMAIN, SERVICE_MARK_READ, mark_read_service, SCHEMA_SERVICE_MARK_READ
     )
 
-    websocket_api.async_register_command(hass, websocket_get_notifications)
+    domain_data[_SERVICES_REGISTERED_KEY] = True
+    register_notifications_websocket(hass)
     #End notifications part setup
+
+
+def remove_notifications(hass) -> None:
+    """Remove owned notification services and transient notification states."""
+    domain_data = find_domain_data(hass)
+    if domain_data is None:
+        return
+
+    if domain_data.pop(_SERVICES_REGISTERED_KEY, False):
+        for service in NOTIFICATION_SERVICES:
+            hass.services.async_remove(DOMAIN, service)
+
+    stored_notifications = domain_data.get("notifications", {})
+    for entity_id in tuple(stored_notifications):
+        hass.states.async_remove(entity_id)
+    stored_notifications.clear()

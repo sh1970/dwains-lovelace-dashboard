@@ -1,92 +1,200 @@
-import { hass } from "card-tools/src/hass";
+import { hass } from "./hass-compat";
 import {
   navigate
-} from 'custom-card-helpers';
+} from './frontend-helpers';
 import { popUp } from "./dwains-popup";
-import { fireEvent } from "card-tools/src/event";
-import { mdiDotsVertical, mdiNotePlus, mdiCog } from "@mdi/js";
-import { css, html, LitElement } from 'lit-element';
+import { fireEvent } from "./card-tools-compat";
+import { mdiDotsVertical, mdiNotePlus, mdiCog, mdiPencil } from "@mdi/js";
+import { css, html, LitElement } from 'lit';
+import { keyed } from 'lit/directives/keyed.js';
 import translateEngine from './translate-engine';
 import Sortable from 'sortablejs/modular/sortable.complete.esm.js';
 import { subtleMorePagesStyles } from './styles/dwains-subtle-style';
+const { EventSubscriptionOwner } = require('./event-subscription-owner');
+const { TimerOwner } = require('./timer-owner');
+const { PopupOpenScheduler } = require('./popup-open-scheduler');
+const { ReloadableLoadOwner } = require('./reloadable-load-owner');
+const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
+const { websocketReadStore } = require('./websocket-read-store');
+const { closeParentDropdown } = require('./dropdown-controller');
+const { defineDwainsElement } = require('./custom-element-registration');
+const { dispatchMorePageMetadataChanged } = require('./more-page-events');
+const morePagesEditModes = new WeakMap();
 
-const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
-Promise.race(bases2).then(async () => {
-  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
+function morePagesEditModeScope(hassInstance) {
+  const scope = hassInstance?.connection || hassInstance;
+  return scope && (typeof scope === 'object' || typeof scope === 'function')
+    ? scope
+    : undefined;
+}
 
-    class MorePagesCard extends LitElement {
+class MorePagesCard extends LitElement {
         static get properties() {
           return {
             configuration: {},
             editMode: {},
+            _loading: { state: true },
+            _loadError: { state: true },
+            _actionError: { state: true },
+            _sortError: { state: true },
           };
         }
 
         /**
          * @param {any} hass
          */
+        constructor() {
+          super();
+          this._subscriptions = new EventSubscriptionOwner();
+          this._timers = new TimerOwner();
+          this._popupOpens = new PopupOpenScheduler(this._timers);
+          this._loads = new ReloadableLoadOwner((context) => this._loadConfiguration(context));
+          this._startedHass = undefined;
+          this._configReady = false;
+          this._loading = true;
+          this.editMode = false;
+          this._sortGeneration = 0;
+          this._gridRevision = 0;
+          this._pendingSortOrder = undefined;
+          this._dragActive = false;
+          this._reloadAfterSort = false;
+          this._confirmedVisibility = new Map();
+        }
+
         set hass(hass) {
-          if(this.data == null || this.data.length === 0) return;
-          Object.values(this.data).map((data) => {
-            data.cards.forEach((item) => {
-              item.card.hass = hass;
-            });
-            data.customCardsTop.forEach((item) => {
-              item.card.hass = hass;
-            });
-            data.customCardsBottom.forEach((item) => {
-              item.card.hass = hass;
-            });
-          });
+          const connectionChanged = hasHassConnectionChanged(this._hass, hass);
           this._hass = hass;
-          this.requestUpdate();
+          const scope = morePagesEditModeScope(hass);
+          this.editMode = scope ? (morePagesEditModes.get(scope) ?? false) : false;
+          if (connectionChanged && this.isConnected) {
+            this._subscriptions.disconnect();
+            this._subscriptions.connect();
+          }
+          void this._startIfReady(connectionChanged);
         }
 
         setConfig(config) {
-          this._hass = hass();
-          this.editMode = false;
+          if (!this._hass) this._hass = hass();
+          const scope = morePagesEditModeScope(this._hass);
+          this.editMode = scope ? (morePagesEditModes.get(scope) ?? false) : false;
+          this._configReady = true;
+          void this._startIfReady();
         }
 
         async connectedCallback(){
           //console.log('connectedCallBack');
           super.connectedCallback();
+          this._subscriptions.connect();
+          this._timers.connect();
 
-          await this._loadData(); //Load areas
+          await this._startIfReady();
+        }
 
-          if(!this._unsub){
-            this._unsub = await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_more_pages_reload");
+        async _startIfReady(reload = false) {
+          const connection = hassConnectionIdentity(this._hass);
+          if (!this.isConnected || !this._hass || !this._configReady || this._startedHass === connection) return;
+          const hass = this._hass;
+          this._startedHass = connection;
+          try {
+            if (reload) await this._reloadCard();
+            else await this._loadData();
+            if (this.isConnected && hassConnectionIdentity(this._hass) === connection && this._startedHass === connection) {
+              await this._subscribeReload();
+            }
+          } catch (error) {
+            if (this._startedHass === connection) this._startedHass = undefined;
+            this._loading = false;
+            this._loadError = error;
+            console.error('Error starting more pages card:', error);
           }
         }
 
         disconnectedCallback(){
           super.disconnectedCallback();
-          if(this._unsub){
-            Promise.resolve(this._unsub()).catch(() => {});
-            this._unsub = undefined;
+          this._subscriptions.disconnect();
+          this._timers.disconnect();
+          this._startedHass = undefined;
+          this._sortGeneration += 1;
+          this._pendingSortOrder = undefined;
+          this._dragActive = false;
+          this._reloadAfterSort = false;
+          this._loads.invalidate();
+          this._destroySortable();
+        }
+
+        updated(changedProperties) {
+          if (
+            changedProperties.has('editMode')
+            || (this.editMode && changedProperties.has('configuration'))
+          ) {
+            this._syncSortable();
           }
+        }
+
+        _subscribeReload(){
+          return this._subscriptions.subscribeEvent(
+            'more-pages',
+            this._hass,
+            "dwains_dashboard_more_pages_reload",
+            () => {
+              websocketReadStore.invalidate(this._hass, {
+                type: 'dwains_dashboard/configuration/get',
+              });
+              websocketReadStore.invalidate(this._hass, {
+                type: 'dwains_dashboard/more_pages/get',
+              });
+              if (this._dragActive || this._pendingSortOrder) {
+                this._reloadAfterSort = true;
+                return;
+              }
+              this._reloadCard().catch((error) => {
+                console.error('Error reloading more pages card:', error);
+              });
+            },
+          );
         }
 
         async _reloadCard(){
-          await this._loadData();
+          await this._loads.reload();
           this.requestUpdate();
         }
 
-        async _loadData(){
-          //Load configuration
-          this.configuration = await this._hass.callWS({
-            type: 'dwains_dashboard/configuration/get'
-          });
+        _loadData(){
+          return this._loads.load();
+        }
 
-          if(this.configuration == null || this.configuration.length === 0
-          ){
-          } else {
-
-            //for the ha-icon-picker?
-            const loader = document.createElement("hui-masonry-view");
-            loader.lovelace = { editMode: true };
-            loader.willUpdate(new Map());
-            //end for the ha-icon-picker
+        async _loadConfiguration({ isCurrent = () => true } = {}){
+          let configuration = await websocketReadStore.readPreferred(
+            this._hass,
+            { type: 'dwains_dashboard/more_pages/get' },
+            { type: 'dwains_dashboard/configuration/get' },
+            { capability: "dashboard-read-slices" },
+          );
+          if (!isCurrent()) return;
+          for (const [foldername, visible] of this._confirmedVisibility) {
+            const page = configuration.more_pages?.[foldername] || {};
+            if (page.show_in_navbar === visible) {
+              this._confirmedVisibility.delete(foldername);
+            } else {
+              configuration = {
+                ...configuration,
+                more_pages: {
+                  ...(configuration.more_pages || {}),
+                  [foldername]: { ...page, foldername, show_in_navbar: visible },
+                },
+              };
+            }
           }
+          if (this._pendingSortOrder) {
+            configuration = this._configurationWithMorePageOrder(
+              configuration,
+              this._pendingSortOrder,
+            );
+          }
+          this.configuration = configuration;
+          this._loading = false;
+          this._loadError = undefined;
+
         }
 
         _handleMorePageClick(ev){
@@ -95,40 +203,22 @@ Promise.race(bases2).then(async () => {
           this.requestUpdate();
         }
 
-        // _handleMorePageEditClick(ev) {
-        //   ev.stopPropagation();
-
-        //   const more_page = ev.currentTarget.more_page;
-        //   const name = ev.currentTarget.name;
-        //   const icon = ev.currentTarget.more_page_icon;
-        //   const showInNavbar = ev.currentTarget.showInNavbar;
-        //   window.setTimeout(() => {
-        //     fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
-        //     popUp(translateEngine(this._hass, 'more.edit'), {
-        //       type: "custom:dwains-edit-more-page-card",
-        //       more_page: more_page,
-        //       name: name,
-        //       icon: icon,
-        //       showInNavbar: showInNavbar,
-        //     }, false, '');
-        //   }, 50);
-        // }
         _handleCreateMorePageClicked(ev){
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
-          window.setTimeout(() => {
-            fireEvent("hass-more-info", {entityId: ""}, document.querySelector("home-assistant"));
+          this._popupOpens.schedule(() => {
+            fireEvent("hass-more-info", {entityId: ""}, this);
             popUp(translateEngine(this._hass, 'more.create'), {
               type: "custom:dwains-edit-more-page-card",
             }, true, '');
-          }, 50);
+          });
 
         }
         _handleRemoveMorePageClicked(ev){
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
           const morePage = ev.currentTarget.more_page;
-          this._hass.connection.sendMessagePromise({
+          this._hass.callWS({
             type: 'dwains_dashboard/remove_more_page',
             foldername: morePage,
           }).then(
@@ -140,6 +230,12 @@ Promise.race(bases2).then(async () => {
                     this.configuration = {...this.configuration, more_pages: morePages};
                     this.requestUpdate();
                   }
+                  websocketReadStore.invalidate(this._hass, {
+                    type: 'dwains_dashboard/configuration/get',
+                  });
+                  websocketReadStore.invalidate(this._hass, {
+                    type: 'dwains_dashboard/more_pages/get',
+                  });
                   await this._reloadCard();
               },
               (err) => {
@@ -147,56 +243,202 @@ Promise.race(bases2).then(async () => {
               }
           );
         }
-        _handleAddToNavbarClick(ev){
+        async _handleNavbarVisibilityClick(ev){
+          closeParentDropdown(ev);
+          ev.stopPropagation();
           const morePage = ev.currentTarget.more_page;
-          this._hass.connection.sendMessagePromise({
-            type: 'dwains_dashboard/remove_more_page',
-            foldername: ev.currentTarget.more_page,
-          }).then(
-              (resp) => {
-                  console.log(resp);
+          const showInNavbar = Boolean(ev.currentTarget.show_in_navbar);
+          const existingPage = this.configuration?.more_pages?.[morePage] || {};
+          this._actionError = undefined;
+          try {
+            // Keep this compatible with an HA backend that is still running the
+            // previous command schema while frontend resources are refreshed.
+            // The legacy add command accepts no visibility argument; the
+            // established edit command already supports removing the entry.
+            const response = await this._hass.callWS(
+              showInNavbar
+                ? {
+                    type: 'dwains_dashboard/add_more_page_to_navbar',
+                    more_page: morePage,
+                  }
+                : {
+                    type: 'dwains_dashboard/edit_more_page_button',
+                    more_page: morePage,
+                    name: existingPage.name || morePage,
+                    icon: existingPage.icon || 'mdi:puzzle',
+                    showInNavbar: false,
+                  },
+            );
+            const page = {
+              ...existingPage,
+              ...(response?.page || {}),
+              foldername: response?.foldername || morePage,
+              show_in_navbar: showInNavbar,
+            };
+            this.configuration = {
+              ...this.configuration,
+              more_pages: {
+                ...(this.configuration?.more_pages || {}),
+                [morePage]: page,
               },
-              (err) => {
-                  console.error('Message failed!', err);
-              }
-          );
+            };
+            this._confirmedVisibility.set(morePage, showInNavbar);
+            dispatchMorePageMetadataChanged(window, page);
+            websocketReadStore.invalidate(this._hass, {
+              type: 'dwains_dashboard/configuration/get',
+            });
+            websocketReadStore.invalidate(this._hass, {
+              type: 'dwains_dashboard/more_pages/get',
+            });
+            this._actionError = undefined;
+            this.requestUpdate();
+          } catch (error) {
+            this._actionError = error;
+            console.error('Failed to change More Page navigation visibility:', error);
+          }
+        }
+
+        async _handleEditMorePageClicked(ev){
+          closeParentDropdown(ev);
+          ev.stopPropagation();
+          const morePage = ev.currentTarget.more_page;
+          try {
+            const page = await websocketReadStore.readPreferred(
+              this._hass,
+              { type: 'dwains_dashboard/more_page/get', foldername: morePage },
+              { type: 'dwains_dashboard/configuration/get' },
+              {
+                capability: "dashboard-read-slices",
+                selectFallback: (configuration) => configuration?.more_pages?.[morePage],
+              },
+            );
+            if (!page?.card) {
+              throw new Error(`More page "${morePage}" has no card configuration`);
+            }
+            const confirmedVisibility = this._confirmedVisibility.get(morePage);
+            this._popupOpens.schedule(() => {
+              fireEvent("hass-more-info", {entityId: ""}, this);
+              popUp(translateEngine(this._hass, 'more.edit'), {
+                type: "custom:dwains-edit-more-page-card",
+                foldername: page.foldername || morePage,
+                name: page.name,
+                icon: page.icon,
+                showInNavbar:
+                  confirmedVisibility ?? page.show_in_navbar,
+                cardConfig: page.card,
+                mode: "editor-element",
+              }, true, '');
+            });
+          } catch (error) {
+            console.error('Failed to load more page for editing:', error);
+            this._loadError = error;
+          }
         }
 
         _handleEditModeClicked(ev){
-          if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+          closeParentDropdown(ev);
           ev.stopPropagation();
-          const value = ev.currentTarget.value;
-
-          if(value){
-            this._sortable = [];
-            const sortableElements = this.shadowRoot.querySelectorAll('.sortable');
-            for(var i=0; i<sortableElements.length; i++){
-              this._sortable[i] = new Sortable(sortableElements[i], {
-                  forceFallback: true,
-                  animation: 150,
-                  dataIdAttr: "data-more_page",
-                  handle: '.sortable-move',
-                  onEnd: function(event){
-                    console.log(event);
-                    hass().connection.sendMessagePromise({
-                        type: 'dwains_dashboard/sort_more_page',
-                        sortData: JSON.stringify(this.toArray()),
-                      }).then(
-                          (resp) => {
-                              console.log(resp);
-                          },
-                          (err) => {
-                              console.error('Message failed!', err);
-                          }
-                      );
-                  }
-              });
-            }
-          } else {
-            this._sortable.forEach(sortElement => sortElement.destroy());
-            this._sortable = undefined;
-          }
+          const value = ev.currentTarget.value === true;
           this.editMode = value;
+          const scope = morePagesEditModeScope(this._hass);
+          if (scope) morePagesEditModes.set(scope, value);
+        }
+
+        _syncSortable() {
+          this._destroySortable();
+          if (!this.editMode || !this.isConnected) return;
+          const sortableElement = this.shadowRoot?.querySelector('.sortable');
+          if (!sortableElement) return;
+          const card = this;
+          this._sortable = [new Sortable(sortableElement, {
+            forceFallback: true,
+            animation: 150,
+            dataIdAttr: "data-more_page",
+            handle: '.sortable-move',
+            onStart() {
+              card._dragActive = true;
+            },
+            onEnd() {
+              const order = this.toArray();
+              card._dragActive = false;
+              card._reloadAfterSort = false;
+              void card._saveMorePageOrder(order);
+            },
+          })];
+        }
+
+        _configurationWithMorePageOrder(configuration, order) {
+          const pages = configuration?.more_pages || {};
+          const morePages = { ...pages };
+          order.forEach((foldername, index) => {
+            if (morePages[foldername]) {
+              morePages[foldername] = {
+                ...morePages[foldername],
+                sort_order: index + 1,
+              };
+            }
+          });
+          return { ...(configuration || {}), more_pages: morePages };
+        }
+
+        async _saveMorePageOrder(order) {
+          if (!Array.isArray(order) || order.length === 0) return;
+          const generation = ++this._sortGeneration;
+          this._pendingSortOrder = [...order];
+          this._gridRevision += 1;
+          this._sortError = undefined;
+          this.configuration = this._configurationWithMorePageOrder(
+            this.configuration,
+            order,
+          );
+          this.requestUpdate();
+          try {
+            const response = await this._hass.callWS({
+              type: 'dwains_dashboard/sort_more_page',
+              sortData: JSON.stringify(order),
+            });
+            if (generation !== this._sortGeneration) return;
+            const confirmedOrder = Array.isArray(response?.order)
+              ? response.order
+              : order;
+            this._pendingSortOrder = [...confirmedOrder];
+            this.configuration = this._configurationWithMorePageOrder(
+              this.configuration,
+              confirmedOrder,
+            );
+            websocketReadStore.invalidate(this._hass, {
+              type: 'dwains_dashboard/configuration/get',
+            });
+            websocketReadStore.invalidate(this._hass, {
+              type: 'dwains_dashboard/more_pages/get',
+            });
+            this._reloadAfterSort = false;
+            await this._reloadCard();
+            if (generation !== this._sortGeneration) return;
+            this._pendingSortOrder = undefined;
+            this._reloadAfterSort = false;
+            this.requestUpdate();
+          } catch (error) {
+            if (generation !== this._sortGeneration) return;
+            this._pendingSortOrder = undefined;
+            this._reloadAfterSort = false;
+            this._sortError = error;
+            console.error('Failed to save More Page order:', error);
+            websocketReadStore.invalidate(this._hass, {
+              type: 'dwains_dashboard/configuration/get',
+            });
+            websocketReadStore.invalidate(this._hass, {
+              type: 'dwains_dashboard/more_pages/get',
+            });
+            await this._reloadCard().catch((reloadError) => {
+              console.error('Failed to restore More Page order:', reloadError);
+            });
+          }
+        }
+
+        _destroySortable(){
+          this._sortable?.forEach((sortElement) => sortElement.destroy());
+          this._sortable = undefined;
         }
 
 
@@ -246,6 +488,16 @@ Promise.race(bases2).then(async () => {
                       <ha-list-item
                         graphic="icon"
                         .more_page=${key}
+                        @click=${this._handleEditMorePageClicked}
+                      >
+                        <div slot="graphic">
+                          <ha-svg-icon .path=${mdiPencil}></ha-svg-icon>
+                        </div>
+                        ${this._hass.localize("ui.components.entity.entity-picker.edit")}
+                      </ha-list-item>
+                      <ha-list-item
+                        graphic="icon"
+                        .more_page=${key}
                         @click=${this._handleRemoveMorePageClicked}
                       >
                         <div slot="graphic">
@@ -253,18 +505,22 @@ Promise.race(bases2).then(async () => {
                         </div>
                         ${this._hass.localize("ui.common.remove")}
                       </ha-list-item>
-                      ${!data.show_in_navbar == 9 ? html `
-                        <ha-list-item
-                          graphic="icon"
-                          .more_page="${key}"
-                          @click="${this._handleAddToNavbarClick}"
-                        >
-                          <div slot="graphic">
-                            <ha-icon .icon=${"mdi:tag-plus"}></ha-icon>
-                          </div>
-                          ${translateEngine(this._hass, 'more.add_navbar')}
-                        </ha-list-item>` : ""
-                      }
+                      <ha-list-item
+                        graphic="icon"
+                        .more_page=${key}
+                        .show_in_navbar=${!data.show_in_navbar}
+                        @click=${this._handleNavbarVisibilityClick}
+                      >
+                        <div slot="graphic">
+                          <ha-icon .icon=${data.show_in_navbar ? "mdi:tag-minus" : "mdi:tag-plus"}></ha-icon>
+                        </div>
+                        ${translateEngine(
+                          this._hass,
+                          data.show_in_navbar
+                            ? 'more.remove_navbar'
+                            : 'more.add_navbar',
+                        )}
+                      </ha-list-item>
                   </ha-dropdown>
                 </div>
               </ha-card>` : ""}
@@ -273,25 +529,34 @@ Promise.race(bases2).then(async () => {
         }
 
         render() {
-          if(this.configuration == null || this.configuration.length === 0){
-            return html``;
-          } else {
-            const more_pages = Object.entries(this.configuration['more_pages']).sort(function (x, y) {
-              let a = x[1].sort_order,
-                  b = y[1].sort_order;
+          if(this._loading){
+            return html`<div class="overview-state"><ha-circular-progress active></ha-circular-progress></div>`;
+          }
+          if(this._loadError){
+            return html`<div class="overview-state overview-error">${this._loadError.message || this._loadError}</div>`;
+          }
+          const pages = this.configuration?.more_pages || {};
+          const morePages = Object.entries(pages).sort(function (x, y) {
+              let a = x[1].sort_order ?? 99,
+                  b = y[1].sort_order ?? 99;
               return a == b ? 0 : a > b ? 1 : -1;
             });
 
             //console.log(1,this.configuration['more_pages']);
             return html`
                 <div id="more_pages" class="p-4 dd-dashboard-style-refresh">
+                    ${this._actionError ? html`
+                      <div class="overview-state overview-error">
+                        ${this._actionError.message || this._actionError}
+                      </div>
+                    ` : ""}
                     <div class="flex justify-between mb-2">
                     <div>
                         <h2 class="font-semibold text-lg capitalize">
                         ${translateEngine(this._hass, 'more.title_plural')}
                         </h2>
                         <span class="text-gray-700">
-                        ${Object.keys(this.configuration['more_pages']).length} ${translateEngine(this._hass, 'more.pages')}
+                        ${morePages.length} ${translateEngine(this._hass, 'more.pages')}
                         </span>
                     </div>
                     <div>
@@ -308,7 +573,7 @@ Promise.race(bases2).then(async () => {
                           ></ha-icon-button>
                             <ha-list-item
                                 graphic="icon"
-                                @click="${this._handleCreateMorePageClicked}"
+                                @click=${this._handleCreateMorePageClicked}
                             >
                                 <div slot="graphic">
                                   <ha-svg-icon .path=${mdiNotePlus}></ha-svg-icon>
@@ -343,21 +608,66 @@ Promise.race(bases2).then(async () => {
                     </div>
                     </div>
 
-                    <div class="grid grid-cols-2 md-grid-cols-3 xl-grid-cols-4 gap-4 sortable">
-                      ${Object.entries(more_pages).map(([k,v]) => this._renderPageButton(v[0],v[1]))}
-                    </div>
+                    ${this._sortError ? html`
+                      <div class="sort-error" role="alert">
+                        ${this._sortError.message || this._sortError}
+                      </div>
+                    ` : ""}
+                    ${keyed(this._gridRevision, html`
+                      <div class="grid grid-cols-2 dd-overview-grid md-grid-cols-3 xl-grid-cols-4 gap-4 sortable">
+                        ${morePages.map(([key, data]) => this._renderPageButton(key, data))}
+                      </div>
+                    `)}
                 </div>
             `;
-            //  ${Object.entries(this.configuration['more_pages']).map(([k,v]) => this._renderPageButton(k,v))}
-          }
         }
 
         static get styles() {
           return [css`
+            :host {
+              display: block;
+              box-sizing: border-box;
+              width: 100%;
+              min-width: 0;
+              max-width: 100%;
+            }
+            .dd-overview-grid {
+              box-sizing: border-box;
+              width: 100%;
+              min-width: 0;
+              max-width: 100%;
+            }
+            .sort-error {
+              margin: 0 0 1rem;
+              padding: .75rem;
+              border-radius: .25rem;
+              color: var(--error-color);
+              background: color-mix(in srgb, var(--error-color) 10%, transparent);
+            }
+            @media (max-width: 599px) {
+              #more_pages {
+                box-sizing: border-box;
+                max-width: 100%;
+              }
+              .grid.dd-overview-grid > * {
+                min-width: 0;
+                max-width: 100%;
+              }
+            }
             .sortable-move {
               cursor: -webkit-grabbing;
               cursor: grab;
               margin: auto 0;
+            }
+            .overview-state {
+              display: flex;
+              min-height: 10rem;
+              align-items: center;
+              justify-content: center;
+              color: var(--secondary-text-color);
+            }
+            .overview-error {
+              color: var(--error-color);
             }
             .card-actions-multiple {
               display: flex;
@@ -729,6 +1039,5 @@ Promise.race(bases2).then(async () => {
         }
 
 
-      }
-      customElements.define("more-pages-card", MorePagesCard);
-});
+}
+defineDwainsElement("more-pages-card", MorePagesCard);

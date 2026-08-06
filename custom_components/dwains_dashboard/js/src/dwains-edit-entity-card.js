@@ -1,15 +1,11 @@
-import { hass } from "card-tools/src/hass";
-import { css, html, LitElement } from 'lit-element';
+import { hass } from "./hass-compat";
+import { css, html, LitElement } from 'lit';
 import translateEngine from './translate-engine';
 import { closePopup } from "./helpers";
+const { closeParentDropdown } = require('./dropdown-controller');
+const { defineDwainsElement } = require('./custom-element-registration');
 
-const bases2 = [customElements.whenDefined('hui-masonry-view'), customElements.whenDefined('hc-lovelace')];
-Promise.race(bases2).then(async () => {
-  const cardHelpers = await (window.__dd_wait_card_helpers ? window.__dd_wait_card_helpers() : window.loadCardHelpers());
-
-
-
-  class DwainsEditEntityCard extends LitElement {
+class DwainsEditEntityCard extends LitElement {
     static get styles() {
       return [
         css`
@@ -61,11 +57,12 @@ Promise.race(bases2).then(async () => {
       ]
     }
     setConfig(config) {
-      this.hass = hass();
+      if (!this.hass) this.hass = hass();
       this.entity = config.entity;
       this.friendlyName = config.friendlyName ? config.friendlyName : "";
 
       this.hideEntity = config.hideEntity ? config.hideEntity : false;
+      this.hideEntityInArea = config.hideEntityInArea ?? false;
       this.disableEntity = config.disableEntity ? config.disableEntity : false;
       this.excludeEntity = config.excludeEntity ? config.excludeEntity : false;
 
@@ -81,36 +78,36 @@ Promise.race(bases2).then(async () => {
       this.customCard = config.customCard ? config.customCard : false;
       this.customPopup = config.customPopup ? config.customPopup : false;
     }
-    _saveButton(ev){
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+    async _saveButton(ev){
+      closeParentDropdown(ev);
       ev.stopPropagation();
-      this.hass.connection.sendMessagePromise({
-        type: 'dwains_dashboard/edit_entity',
-        entity: this.entity,
-        friendlyName: this.friendlyName,
-
-        disableEntity: this.disableEntity,
-        hideEntity: this.hideEntity,
-        excludeEntity: this.excludeEntity,
-
-        rowSpan: this.rowSpan,
-        colSpan: this.colSpan,
-        rowSpanLg: this.rowSpanLg,
-        colSpanLg: this.colSpanLg,
-        rowSpanXl: this.rowSpanXl,
-        colSpanXl: this.colSpanXl,
-
-        customCard: this.customCard,
-        customPopup: this.customPopup,
-      }).then(
-          (resp) => {
-              console.log(resp);
-              closePopup();
-          },
-          (err) => {
-              console.error('Message failed!', err);
-          }
-      );
+      try {
+        await this.hass.callWS({
+          type: 'dwains_dashboard/edit_entity',
+          entity: this.entity,
+          friendlyName: this.friendlyName,
+          disableEntity: this.disableEntity,
+          hideEntity: this.hideEntity,
+          excludeEntity: this.excludeEntity,
+          rowSpan: this.rowSpan,
+          colSpan: this.colSpan,
+          rowSpanLg: this.rowSpanLg,
+          colSpanLg: this.colSpanLg,
+          rowSpanXl: this.rowSpanXl,
+          colSpanXl: this.colSpanXl,
+          customCard: this.customCard,
+          customPopup: this.customPopup,
+        });
+        await this.hass.callWS({
+          type: 'dwains_dashboard/edit_entity_bool_value',
+          entityId: this.entity,
+          key: 'hidden_in_area',
+          value: this.hideEntityInArea,
+        });
+        closePopup();
+      } catch (error) {
+        console.error('Failed to save entity settings:', error);
+      }
     }
     _friendlyNameChanged(e) {
       this.friendlyName = e.target.value;
@@ -120,6 +117,9 @@ Promise.race(bases2).then(async () => {
     }
     _hideValueChanged(ev) {
       this.hideEntity = ev.target.checked;
+    }
+    _hideInAreaValueChanged(ev) {
+      this.hideEntityInArea = ev.target.checked;
     }
     _excludeValueChanged(ev) {
       this.excludeEntity = ev.target.checked;
@@ -131,7 +131,7 @@ Promise.race(bases2).then(async () => {
       this.customPopup = ev.target.checked;
     }
     _haSelectChanged(ev) {
-      if(window.__dd_close_parent_dropdown) window.__dd_close_parent_dropdown(ev);
+      closeParentDropdown(ev);
       ev.stopPropagation();
       const target = ev.currentTarget || ev.target;
       const type = target.name || target.type || target.getAttribute?.("type");
@@ -207,6 +207,12 @@ Promise.race(bases2).then(async () => {
                 .checked=${this.hideEntity}
               ></ha-checkbox>
             </ha-formfield>
+            <ha-formfield label=${translateEngine(this.hass, 'entity.hide_in_area')}>
+              <ha-checkbox
+                @change=${this._hideInAreaValueChanged}
+                .checked=${this.hideEntityInArea}
+              ></ha-checkbox>
+            </ha-formfield>
             <ha-formfield label=${translateEngine(this.hass, 'entity.exclude')}>
               <ha-checkbox
                 @change=${this._excludeValueChanged}
@@ -238,6 +244,5 @@ Promise.race(bases2).then(async () => {
       `;
 
     }
-  }
-  customElements.define("dwains-edit-entity-card", DwainsEditEntityCard);
-});
+}
+defineDwainsElement("dwains-edit-entity-card", DwainsEditEntityCard);

@@ -1,14 +1,19 @@
-import { selectTree } from "card-tools/src/helpers";
+import { selectTree } from "./card-tools-compat";
 import {
   computeDomain
-} from 'custom-card-helpers';
+} from './frontend-helpers';
+const { isInvalidDwainsCardElement } = require('./card-element-validation');
+const { defineDwainsElement } = require('./custom-element-registration');
+const { closeCardToolsPopup } = require('./popup-host');
+const { getDwainsRuntimeState } = require('./runtime-state');
 
 const getUsableDwainsConstructor = (tag) => {
+  const runtimeState = getDwainsRuntimeState();
   const usable = (ctor) => Boolean(
     ctor?.prototype && typeof ctor.prototype.setConfig === 'function'
   );
-  return (usable(window.__dd_orig?.[tag]) && window.__dd_orig[tag])
-    || (usable(window.__dd_ctors?.[tag]) && window.__dd_ctors[tag])
+  return (usable(runtimeState.originalConstructors?.[tag]) && runtimeState.originalConstructors[tag])
+    || (usable(runtimeState.constructors?.[tag]) && runtimeState.constructors[tag])
     || (usable(customElements.get(tag)) && customElements.get(tag));
 };
 
@@ -26,7 +31,7 @@ const waitForDwainsConstructor = async (tag) => {
 const createDwainsElement = async (tag, ctor, config) => {
   const fixedTag = `${tag}-ddfix`;
   if (!customElements.get(fixedTag)) {
-    customElements.define(fixedTag, class extends ctor {});
+    defineDwainsElement(fixedTag, class extends ctor {});
   }
   const element = document.createElement(fixedTag);
   if (customElements.upgrade) customElements.upgrade(element);
@@ -66,12 +71,7 @@ export async function createCardElementSafe(cardHelpers, config, hassObj) {
     originalError = originalError || err;
   }
 
-  const invalidDwainsElement = isDwainsCard && (
-    !element
-    || typeof element.setConfig !== 'function'
-    || element.localName === 'hui-error-card'
-    || element._config?.type === 'error'
-  );
+  const invalidDwainsElement = isInvalidDwainsCardElement(element, isDwainsCard);
   if (invalidDwainsElement) {
     const ctor = getUsableDwainsConstructor(tag);
     if (ctor) element = await createDwainsElement(tag, ctor, config);
@@ -83,12 +83,7 @@ export async function createCardElementSafe(cardHelpers, config, hassObj) {
 }
 
 export async function closePopup() {
-    const root = document.querySelector("home-assistant") || document.querySelector("hc-root");
-    //fireEvent("hass-more-info", {entityId: "."}, root);
-    const el = await selectTree(root, "$ card-tools-popup");
-
-    if(el)
-      el.closeDialog();
+    return closeCardToolsPopup({ selectTree });
 }
 
 const normalizedName = (value) => typeof value === 'string' ? value.trim() : '';

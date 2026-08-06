@@ -1,7 +1,33 @@
 import { LitElement, html, css } from 'lit';
-import { navigate } from 'custom-card-helpers';
+import { navigate } from './frontend-helpers';
+import { fireEvent } from './card-tools-compat';
 import translateEngine from './translate-engine';
 import { subtleNavigationStyles } from './styles/dwains-subtle-style';
+const { EventSubscriptionOwner } = require('./event-subscription-owner');
+const { EventListenerOwner } = require('./event-listener-owner');
+const { ReloadableLoadOwner } = require('./reloadable-load-owner');
+const { hassConnectionIdentity, hasHassConnectionChanged } = require('./hass-connection');
+const { websocketReadStore } = require('./websocket-read-store');
+const { defineDwainsElement } = require('./custom-element-registration');
+const { VisualViewportNavigationOwner } = require('./visual-viewport-navigation');
+const {
+  createNavigationActiveState,
+  morePageRoutePath,
+  navigationLocationPath,
+} = require('./navigation-active-state');
+const {
+  MORE_PAGE_METADATA_CHANGED_EVENT,
+  MORE_PAGE_SAVED_EVENT,
+} = require('./more-page-events');
+const navigationConfigurationCache = new WeakMap();
+const navigationVisibilityOverrides = new WeakMap();
+
+function navigationCacheScope(hass) {
+  const scope = hass?.connection || hass;
+  return scope && (typeof scope === 'object' || typeof scope === 'function')
+    ? scope
+    : undefined;
+}
 //Herschreven
 class DwainsNavigationCard extends LitElement {
     static get styles() {
@@ -14,7 +40,7 @@ class DwainsNavigationCard extends LitElement {
             height: auto;
             top: 0;
             z-index: 8;
-            position: fixed;
+            position: sticky;
         }
         .mainNavItems {
             flex-grow: 1;
@@ -23,6 +49,8 @@ class DwainsNavigationCard extends LitElement {
             padding: 0.25rem;
             justify-content: space-between;
             overflow-x: scroll;
+            overscroll-behavior-x: contain;
+            touch-action: pan-x;
             scrollbar-width: none;
         }
         .mainNavItems::-webkit-scrollbar {
@@ -31,60 +59,99 @@ class DwainsNavigationCard extends LitElement {
         .mainNavItems::before, .mainNavItems::after {
             content: ''; /* Insert space before the first item and after the last one */
         }
-        .mainNavItems div {
+        .mainNavItems .nav-item {
             padding: 0.5rem;
             color: var(--primary-text-color);
             position: relative;
             text-align: center;
             display: grid;
             cursor: pointer;
+            appearance: none;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            font: inherit;
+            line-height: normal;
+            touch-action: pan-x;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
-        .mainNavItems div span {
+        .mainNavItems .nav-item span {
             text-transform: capitalize;
         }
-        .mainNavItems div.active {
+        .mainNavItems .nav-item.active {
             color: var(--sidebar-selected-icon-color);
+        }
+        .mainNavItems .nav-item:focus-visible,
+        .toggle-sidebar:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: -2px;
         }
 
         .dwains-dashboard-nav {
             display: flex;
+            isolation: isolate;
+            pointer-events: auto;
+            touch-action: pan-x;
         }
         .toggle-sidebar {
             padding: 1.35rem;
             background: var(--secondary-background-color);
             display: none;
             cursor: pointer;
+            appearance: none;
+            border: 0;
+            outline: 0;
+            color: var(--primary-text-color);
+            font: inherit;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
         .sidebar-always_hidden {
             /* User has the sidebar hidden so always show the button */
             display: block !important;
         }
-        /* bottom: 0; */
-        /* padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); */
-        @media only screen and (max-width: 768px) {
-            :host {
-                position: sticky;
-                bottom: 0;
-                top: auto;
-                padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-            }
+        :host([compact-navigation]) .mainNavItems .nav-item span {
+            display: none;
         }
-        @media only screen and (max-width: 1800px) and (hover: none) {
-            :host {
-                position: sticky;
-                bottom: 0;
-                top: auto;
-                padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-            }
+        :host([compact-navigation]) .toggle-sidebar {
+            display: block;
+            padding: 0.75rem;
         }
-        @media (max-width: 871px) {
-            .mainNavItems div span {
-                display: none;
-            }
-            .toggle-sidebar {
-                display: block;
-                padding: 0.75rem;
-            }
+        :host([mobile-navigation]) {
+            position: relative;
+            bottom: auto;
+            top: auto;
+            padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+        :host([mobile-navigation]) .dwains-dashboard-nav {
+            min-height: var(--dd-mobile-navigation-height, 2.75rem);
+        }
+        :host([mobile-navigation]) .mainNavItems {
+            align-items: flex-start;
+            padding: 0 0.125rem;
+        }
+        :host([mobile-navigation]) .mainNavItems .nav-item {
+            box-sizing: border-box;
+            min-width: var(--dd-mobile-navigation-height, 2.75rem);
+            height: var(--dd-mobile-navigation-control-height, 2.375rem);
+            margin-top: var(--dd-mobile-navigation-top-gap, 0.375rem);
+            padding: 0.1875rem 0.5rem;
+            place-items: center;
+        }
+        :host([mobile-navigation]) .mainNavItems ha-icon,
+        :host([mobile-navigation]) .toggle-sidebar ha-icon {
+            --mdc-icon-size: var(--dd-mobile-navigation-icon-size, 2rem);
+            width: var(--dd-mobile-navigation-icon-size, 2rem);
+            height: var(--dd-mobile-navigation-icon-size, 2rem);
+        }
+        :host([mobile-navigation]) .toggle-sidebar {
+            box-sizing: border-box;
+            width: var(--dd-mobile-navigation-height, 2.75rem);
+            height: var(--dd-mobile-navigation-control-height, 2.375rem);
+            margin-top: var(--dd-mobile-navigation-top-gap, 0.375rem);
+            padding: 0.1875rem 0.375rem;
         }
         `, subtleNavigationStyles(css)];
       }
@@ -100,141 +167,307 @@ class DwainsNavigationCard extends LitElement {
       }
 
       set hass(hass) {
+        const connectionChanged = hasHassConnectionChanged(this._hass, hass);
         this._hass = hass;
-        if (this.isLoading) { // Configuratie laden alleen als het nog niet geladen is
-            this.loadConfig();
+        const cached = navigationConfigurationCache.get(navigationCacheScope(hass));
+        if (cached) {
+          this.configuration = cached;
+          this.isLoading = false;
+        }
+        if (connectionChanged && this.isConnected) {
+          this._subscriptions.disconnect();
+          this._subscriptions.connect();
+          this.isLoading = true;
+        }
+        if (this.isConnected && (this.isLoading || connectionChanged)) {
+          this._startNavigation(connectionChanged);
         }
       }
 
       constructor() {
         super();
-        this.currentPath = document.location.pathname;
+        this.currentPath = navigationLocationPath(document.location);
         this.isLoading = true; // Start met laden aangeven
+        this._subscriptions = new EventSubscriptionOwner();
+        this._listeners = new EventListenerOwner();
+        this._viewportNavigation = new VisualViewportNavigationOwner();
+        this._loads = new ReloadableLoadOwner((context) => this._loadConfiguration(context));
+        this._navigationGeneration = 0;
+        this._morePageMetadataChanged = (event) => {
+          const page = event.detail?.page;
+          if (!page?.foldername) return;
+          const cacheScope = navigationCacheScope(this._hass);
+          if (cacheScope && typeof page.show_in_navbar === 'boolean') {
+            let overrides = navigationVisibilityOverrides.get(cacheScope);
+            if (!overrides) {
+              overrides = new Map();
+              navigationVisibilityOverrides.set(cacheScope, overrides);
+            }
+            overrides.set(page.foldername, page.show_in_navbar);
+          }
+          const configuration = this.configuration || { devices: {}, more_pages: {} };
+          this.configuration = {
+            ...configuration,
+            more_pages: {
+              ...(configuration.more_pages || {}),
+              [page.foldername]: {
+                ...(configuration.more_pages?.[page.foldername] || {}),
+                ...page,
+              },
+            },
+          };
+          if (cacheScope) {
+            navigationConfigurationCache.set(cacheScope, this.configuration);
+          }
+          this.isLoading = false;
+          this.requestUpdate();
+        };
+        this._routeChanged = () => {
+          this.currentPath = navigationLocationPath(
+            document.location,
+            this.currentPath,
+          );
+          this.requestUpdate();
+        };
+      }
+
+      connectedCallback() {
+        super.connectedCallback();
+        this._viewportNavigation.connect(this);
+        this._subscriptions.connect();
+        this._listeners.listen('location-changed', window, 'location-changed', this._routeChanged);
+        this._listeners.listen('popstate', window, 'popstate', this._routeChanged);
+        this._listeners.listen(
+          'more-page-metadata',
+          window,
+          MORE_PAGE_METADATA_CHANGED_EVENT,
+          this._morePageMetadataChanged,
+        );
+        this._listeners.listen(
+          'more-page-saved',
+          window,
+          MORE_PAGE_SAVED_EVENT,
+          this._morePageMetadataChanged,
+        );
+        this._listeners.connect();
+        if (this._hass) {
+          this._startNavigation();
+        }
       }
 
       disconnectedCallback() {
         super.disconnectedCallback();
-        if(this._unsub){
-          Promise.resolve(this._unsub()).catch(() => {});
-          this._unsub = undefined;
-        }
+        this._viewportNavigation.disconnect();
+        this._subscriptions.disconnect();
+        this._listeners.disconnect();
+        this._navigationGeneration += 1;
+        this._loads.invalidate();
+        this._navigationPromise = undefined;
+        this._navigationConnection = undefined;
         this.isLoading = true;
       }
 
+      _startNavigation(reload = false) {
+        const connection = hassConnectionIdentity(this._hass);
+        if (this._navigationConnection === connection && this._navigationPromise) {
+          return this._navigationPromise;
+        }
+        const generation = ++this._navigationGeneration;
+        this._navigationConnection = connection;
+        const load = reload ? this._loads.reload() : this.loadConfig();
+        const pending = load
+          .then(() => {
+            if (!this.isConnected
+              || generation !== this._navigationGeneration
+              || hassConnectionIdentity(this._hass) !== connection) return undefined;
+            return this._subscribeNavigation();
+          })
+          .catch((error) => {
+            console.error('Error loading navigation:', error);
+            if (generation === this._navigationGeneration) this.isLoading = false;
+          })
+          .finally(() => {
+            if (this._navigationPromise === pending) this._navigationPromise = undefined;
+          });
+        this._navigationPromise = pending;
+        return pending;
+      }
 
-      async loadConfig() {
-        if (this._hass) {
-          try {
-            this.configuration = await this._hass.callWS({
-              type: 'dwains_dashboard/configuration/get'
-            });
-            this.isLoading = false; // Configuratie is geladen
-            this.requestUpdate(); // Vraag een update van de render-functie aan
-            if(!this._unsub){
-              this._unsub = await this._hass.connection.subscribeEvents(() => this._reloadCard(), "dwains_dashboard_navigation_card_reload");
-            }
-          } catch (error) {
-            console.error('Error loading configuration:', error);
-            this.isLoading = false;
+      loadConfig() {
+        return this._loads.load();
+      }
+
+      async _loadConfiguration({ isCurrent = () => true } = {}) {
+        const hass = this._hass;
+        const connection = hassConnectionIdentity(hass);
+        const loadedConfiguration = await websocketReadStore.readPreferred(
+          hass,
+          { type: 'dwains_dashboard/navigation/get' },
+          { type: 'dwains_dashboard/configuration/get' },
+          { capability: "dashboard-read-slices" },
+        );
+        if (!isCurrent() || hassConnectionIdentity(this._hass) !== connection) return;
+        let configuration = loadedConfiguration;
+        const cacheScope = navigationCacheScope(hass);
+        const overrides = cacheScope && navigationVisibilityOverrides.get(cacheScope);
+        for (const [foldername, visible] of overrides || []) {
+          const page = configuration.more_pages?.[foldername] || {};
+          if (page.show_in_navbar === visible) {
+            overrides.delete(foldername);
+          } else {
+            configuration = {
+              ...configuration,
+              more_pages: {
+                ...(configuration.more_pages || {}),
+                [foldername]: { ...page, foldername, show_in_navbar: visible },
+              },
+            };
           }
         }
+        if (overrides && !overrides.size) navigationVisibilityOverrides.delete(cacheScope);
+        this.configuration = configuration;
+        if (cacheScope) navigationConfigurationCache.set(cacheScope, configuration);
+        this.isLoading = false; // Configuratie is geladen
+        this.requestUpdate(); // Vraag een update van de render-functie aan
+      }
+
+      _subscribeNavigation() {
+        return this._subscriptions.subscribeEvent(
+          'navigation',
+          this._hass,
+          "dwains_dashboard_navigation_card_reload",
+          () => {
+              websocketReadStore.invalidate(this._hass, {
+                type: 'dwains_dashboard/configuration/get',
+              });
+              websocketReadStore.invalidate(this._hass, {
+                type: 'dwains_dashboard/navigation/get',
+              });
+            this._reloadCard().catch((error) => {
+              console.error('Error reloading navigation:', error);
+            });
+          },
+        );
       }
 
       async _reloadCard(){
         console.log('Reloading navigation card');
 
-        await this.loadConfig();
+        await this._loads.reload();
         this.requestUpdate();
       }
 
+      _stopNavigationEvent(ev) {
+        ev.stopPropagation();
+      }
+
       _menuClick(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
         const path = ev.currentTarget.path;
-        navigate(window, path);
-        this.currentPath = path;
+        if (navigate(window, path)) {
+          this.currentPath = navigationLocationPath(document.location, path);
+        }
+        this.requestUpdate();
     }
 
       _toggleSidebarClick() {
-        document.querySelector('body > home-assistant').shadowRoot.querySelector('home-assistant-main').dispatchEvent(new CustomEvent('hass-toggle-menu', {detail: {open: true}}));
+        fireEvent('hass-toggle-menu', { open: true }, this);
       }
 
       render() {
-        // Controleer of we nog aan het laden zijn of als er geen configuratie is
-        if (this.isLoading || !this.configuration) {
-            return html``; // Laadindicator of een alternatieve tekst
-        }
-        const more_pages = Object.entries(this.configuration['more_pages']).sort(function (x, y) {
+        const configuration = this.configuration || { devices: {}, more_pages: {} };
+        const more_pages = Object.entries(configuration.more_pages || {}).sort(function (x, y) {
             let a = x[1] && x[1].sort_order ? x[1].sort_order : 99,
                 b = y[1] && y[1].sort_order ? y[1].sort_order : 99;
             return a == b ? 0 : a > b ? 1 : -1;
           });
+        const activeState = createNavigationActiveState({
+          currentPath: navigationLocationPath(document.location, this.currentPath),
+          fallbackHash: window.location.hash,
+          devices: configuration.devices,
+          morePages: configuration.more_pages,
+        });
 
         return html`
-            <div class="dwains-dashboard-nav">
-                <div
+            <div
+                class="dwains-dashboard-nav"
+                @pointerdown=${this._stopNavigationEvent}
+                @pointerup=${this._stopNavigationEvent}
+                @pointercancel=${this._stopNavigationEvent}
+                @click=${this._stopNavigationEvent}
+            >
+                <button
+                    type="button"
                     @click=${this._toggleSidebarClick}
                     class="toggle-sidebar sidebar-${this._hass.dockedSidebar}"
+                    aria-label=${this._hass.localize?.('ui.common.menu') || 'Menu'}
                 >
                     <ha-icon icon="${"mdi:menu"}"></ha-icon>
-                </div>
+                </button>
                 <div class="mainNavItems">
-                    <div
-                        class="${document.location.pathname == '/dwains-dashboard/home' ? 'active' : ''}"
+                    <button
+                        type="button"
+                        class="nav-item ${activeState.home ? 'active' : ''}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/home"}
                     >
                         <ha-icon icon="${"mdi:home"}"></ha-icon>
                         <span>${translateEngine(this._hass, 'home.title')}</span>
-                    </div>
-                    <div
-                        class="${document.location.pathname == '/dwains-dashboard/devices' && !window.location.hash ? 'active' : ''}"
+                    </button>
+                    <button
+                        type="button"
+                        class="nav-item ${activeState.devices ? 'active' : ''}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/devices"}
                     >
                         <ha-icon icon="${"mdi:format-list-bulleted-type"}"></ha-icon>
                         <span>${translateEngine(this._hass, 'device.title_plural')}</span>
-                    </div>
-                    ${Object.entries(this.configuration['devices']).map(([k,v]) =>
+                    </button>
+                    ${Object.entries(configuration.devices || {}).map(([k,v]) =>
                         //, v["icon"]);
                         // k = path
                         html`
                             ${v["show_in_navbar"] ? html`
-                                <div
-                                    class="${document.location.pathname == '/dwains-dashboard/devices' && window.location.hash == '#'+k ? 'active' : ''}"
+                                <button
+                                    type="button"
+                                    class="nav-item ${activeState.device(k) ? 'active' : ''}"
                                     @click=${this._menuClick}
                                     .path=${"/dwains-dashboard/devices#"+k}
                                 >
                                     <ha-icon icon="${v["icon"]}"></ha-icon>
                                     <span>${translateEngine(this._hass,'device.'+k)}</span>
-                                </div>`: ""}
+                                </button>`: ""}
                         `
                     )}
-                    ${Object.entries(more_pages).map(([k,v]) =>
-                        //, v["icon"]);
-                        // k = path
+                    ${more_pages.map(([key, page]) =>
                         html`
-                            ${v[1]["show_in_navbar"] ? html`
-                                <div
-                                    class="${document.location.pathname == '/dwains-dashboard/more_page_'+v[0].toLowerCase().replace("'", "_").replace(" ", "_") ? 'active' : ''}"
+                            ${page["show_in_navbar"] ? html`
+                                <button
+                                    type="button"
+                                    class="nav-item ${activeState.morePage(key) ? 'active' : ''}"
                                     @click=${this._menuClick}
-                                    .path=${"/dwains-dashboard/more_page_"+v[0].toLowerCase().replace("'", "_").replace(" ", "_")}
+                                    .path=${morePageRoutePath(key)}
                                 >
-                                    <ha-icon icon="${v[1]["icon"]}"></ha-icon>
-                                    <span>${v[1]["name"]}</span>
-                                </div>`: ""}
+                                    <ha-icon icon="${page["icon"]}"></ha-icon>
+                                    <span>${page["name"]}</span>
+                                </button>`: ""}
                         `
                     )}
-                    <div
-                        class="${document.location.pathname == '/dwains-dashboard/more_page' ? 'active' : ''}"
+                    <button
+                        type="button"
+                        class="nav-item ${activeState.morePages ? 'active' : ''}"
                         @click=${this._menuClick}
                         .path=${"/dwains-dashboard/more_page"}
                     >
                         <ha-icon icon="${"mdi:view-grid-outline"}"></ha-icon>
                         <span>${translateEngine(this._hass, 'more.title')}</span>
-                    </div>
+                    </button>
                 </div>
             </div>
         `;
       }
 }
 
-customElements.define('dwainsboard-navigation-card', DwainsNavigationCard);
+defineDwainsElement('dwainsboard-navigation-card', DwainsNavigationCard);
+window.dispatchEvent(new CustomEvent("dwains-dashboard-runtime-ready"));
