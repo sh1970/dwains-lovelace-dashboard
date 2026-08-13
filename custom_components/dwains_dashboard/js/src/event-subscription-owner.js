@@ -45,14 +45,31 @@ class EventSubscriptionOwner {
 
   subscribeEvent(key, hass, eventType, listener) {
     return this.subscribe(key, () => {
-      const subscribeEvents = hass?.connection?.subscribeEvents;
-      if (typeof subscribeEvents !== "function") {
+      const connection = hass?.connection;
+      const subscribeMessage = connection?.subscribeMessage;
+      const subscribeEvents = connection?.subscribeEvents;
+      if (typeof subscribeMessage !== "function" && typeof subscribeEvents !== "function") {
         throw new TypeError(`Subscription ${key} requires a Home Assistant event connection`);
       }
       if (typeof listener !== "function") {
         throw new TypeError(`Subscription ${key} requires an event listener`);
       }
-      return subscribeEvents.call(hass.connection, listener, eventType);
+
+      if (typeof subscribeMessage === "function") {
+        return Promise.resolve(
+          subscribeMessage.call(connection, listener, {
+            type: "dwains_dashboard/event/subscribe",
+            event_type: eventType,
+          }),
+        ).catch((error) => {
+          if (error?.code !== "unknown_command" || typeof subscribeEvents !== "function") {
+            throw error;
+          }
+          return subscribeEvents.call(connection, listener, eventType);
+        });
+      }
+
+      return subscribeEvents.call(connection, listener, eventType);
     });
   }
 
