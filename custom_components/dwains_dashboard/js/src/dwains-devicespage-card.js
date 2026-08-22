@@ -31,6 +31,10 @@ const { loadCardHelpers } = require('./card-helpers-loader');
 const { closeParentDropdown } = require('./dropdown-controller');
 const { defineDwainsElement } = require('./custom-element-registration');
 const { attachDeferredCard } = require('./deferred-card');
+const {
+  entityRecoveryActions,
+  entitySettingsFromConfiguration,
+} = require('./entity-settings-config');
 
 function getDwainsHass() {
   return resolveHass();
@@ -688,37 +692,28 @@ const GLOBAL_DEVICE_PAGE_DOMAINS = new Set([
           closeParentDropdown(ev);
           ev.stopPropagation();
           const entity = ev.currentTarget.entity;
-          const friendlyName = ev.currentTarget.friendlyName;
-          const hideEntity = ev.currentTarget.hideEntity;
-          const hideEntityInArea = !!this.configuration?.entities?.[entity]?.hidden_in_area;
-          const excludeEntity = ev.currentTarget.excludeEntity;
-          const disableEntity = ev.currentTarget.disableEntity;
-          const colSpan = ev.currentTarget.colSpan;
-          const rowSpan = ev.currentTarget.rowSpan;
-          const colSpanLg = ev.currentTarget.colSpanLg;
-          const rowSpanLg = ev.currentTarget.rowSpanLg;
-          const colSpanXl = ev.currentTarget.colSpanXl;
-          const rowSpanXl = ev.currentTarget.rowSpanXl;
-          const customCard = ev.currentTarget.customCard;
-          const customPopup = ev.currentTarget.customPopup;
+          const configured = entitySettingsFromConfiguration(this.configuration, entity);
+          const settings = {};
+          for (const key of Object.keys(configured)) {
+            settings[key] = ev.currentTarget[key] ?? configured[key];
+          }
+          this._openEntitySettings(settings);
+        }
+
+        _handleUnavailableEntityEditClick(ev) {
+          closeParentDropdown(ev);
+          ev.stopPropagation();
+          this._openEntitySettings(
+            entitySettingsFromConfiguration(this.configuration, ev.currentTarget.entity),
+          );
+        }
+
+        _openEntitySettings(settings) {
           this._popupOpens.schedule(() => {
             fireEvent("hass-more-info", {entityId: ""}, this);
             popUp(translateEngine(this._hass, 'entity.edit_entity'), {
               type: "custom:dwains-edit-entity-card",
-              entity: entity,
-              friendlyName: friendlyName,
-              hideEntity: hideEntity,
-              hideEntityInArea: hideEntityInArea,
-              excludeEntity: excludeEntity,
-              disableEntity: disableEntity,
-              colSpan: colSpan,
-              rowSpan: rowSpan,
-              colSpanLg: colSpanLg,
-              rowSpanLg: rowSpanLg,
-              colSpanXl: colSpanXl,
-              rowSpanXl: rowSpanXl,
-              customCard: customCard,
-              customPopup: customPopup,
+              ...settings,
             }, false, '');
           });
         }
@@ -1414,6 +1409,11 @@ const GLOBAL_DEVICE_PAGE_DOMAINS = new Set([
           Cookies.set('dwains_dashboard_deviceViewDisplayGrouped', value, { expires: 365 });
         }
         _renderAreaViewEntityCard(entity, type) {
+          const recoveryActions = entityRecoveryActions(
+            this.configuration,
+            entity,
+            type,
+          );
           return html`
             <div>
               <ha-card class="p-2">
@@ -1424,24 +1424,23 @@ const GLOBAL_DEVICE_PAGE_DOMAINS = new Set([
               </ha-card>
               <ha-card>
                 <div class="card-actions">
-                  ${type == 'hidden' ? html`
+                  ${recoveryActions.map((action) => html`
+                    <ha-button
+                      .entity="${entity}"
+                      .key=${action.key}
+                      .value=${false}
+                      @click=${this._handleEntityEditBoolValueClick}
+                    >
+                      ${translateEngine(this._hass, action.translationKey)}
+                    </ha-button>
+                  `)}
                   <ha-button
                     .entity="${entity}"
-                    .key=${"hidden"}
-                    .value=${false}
-                    @click=${this._handleEntityEditBoolValueClick}
+                    @click=${this._handleUnavailableEntityEditClick}
                   >
-                    ${translateEngine(this._hass, 'entity.unhide')}
-                  </ha-button>`: ""}
-                  ${type == 'disabled' ? html`
-                  <ha-button
-                    .entity="${entity}"
-                    .key=${"disabled"}
-                    .value=${false}
-                    @click=${this._handleEntityEditBoolValueClick}
-                  >
-                    ${translateEngine(this._hass, 'entity.enable')}
-                  </ha-button>`: ""}
+                    <ha-svg-icon .path=${mdiCog}></ha-svg-icon>
+                    ${translateEngine(this._hass, 'entity.settings')}
+                  </ha-button>
                 </div>
               </ha-card>
             </div>

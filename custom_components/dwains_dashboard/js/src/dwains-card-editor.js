@@ -5,6 +5,24 @@ const { defineDwainsElement } = require("./custom-element-registration");
 
 const EMPTY_LOVELACE = Object.freeze({ views: Object.freeze([]) });
 
+const SINGLE_ENTITY_CONTEXT_CARDS = new Set([
+  "button",
+  "entity",
+  "gauge",
+  "light",
+  "media-control",
+  "picture-entity",
+  "sensor",
+  "thermostat",
+  "weather-forecast",
+  "custom:button-card",
+  "custom:mushroom-cover-card",
+  "custom:mushroom-entity-card",
+  "custom:mushroom-fan-card",
+  "custom:mushroom-light-card",
+]);
+const ENTITY_LIST_CONTEXT_CARDS = new Set(["calendar", "history-graph"]);
+
 function normalizeLovelace(value) {
   return !value || (Array.isArray(value.views) && value.views.length === 0)
     ? EMPTY_LOVELACE
@@ -102,6 +120,20 @@ function cardConstructor(type, card, registry = customElements) {
   return registered || card?.constructor;
 }
 
+function applyEntityContext(config, type, entityId) {
+  if (!config || typeof config !== "object" || !entityId) return config;
+  const contextualConfig = cloneCardConfig(config);
+  if (
+    SINGLE_ENTITY_CONTEXT_CARDS.has(type)
+    || (type.startsWith("custom:") && Object.hasOwn(contextualConfig, "entity"))
+  ) {
+    contextualConfig.entity = entityId;
+  } else if (ENTITY_LIST_CONTEXT_CARDS.has(type)) {
+    contextualConfig.entities = [entityId];
+  }
+  return contextualConfig;
+}
+
 function firstEntity(hass, domains, predicate = () => true) {
   const accepted = new Set(Array.isArray(domains) ? domains : [domains]);
   return Object.entries(hass?.states || {}).find(([entityId, stateObj]) =>
@@ -193,7 +225,7 @@ function createPreviewConfig(hass, type) {
   return configurations[type]?.();
 }
 
-async function createInitialCardConfig(hass, type) {
+async function createInitialCardConfig(hass, type, entityId) {
   const config = { type };
   const helpers = await loadCardHelpers();
   let card;
@@ -204,15 +236,21 @@ async function createInitialCardConfig(hass, type) {
   }
   const constructor = cardConstructor(type, card);
   const getStubConfig = constructor?.getStubConfig;
-  if (typeof getStubConfig !== "function") return config;
+  if (typeof getStubConfig !== "function") {
+    return applyEntityContext(config, type, entityId);
+  }
 
   try {
-    const entities = Object.keys(hass?.states || {});
+    const availableEntities = Object.keys(hass?.states || {});
+    const entities = entityId && availableEntities.includes(entityId)
+      ? [entityId, ...availableEntities.filter((entry) => entry !== entityId)]
+      : availableEntities;
     const stub = await getStubConfig.call(constructor, hass, entities, []);
-    return stub && typeof stub === "object" ? { type, ...stub } : config;
+    const initialConfig = stub && typeof stub === "object" ? { type, ...stub } : config;
+    return applyEntityContext(initialConfig, type, entityId);
   } catch (error) {
     console.warn(`Unable to create a default configuration for ${type}`, error);
-    return config;
+    return applyEntityContext(config, type, entityId);
   }
 }
 
@@ -220,6 +258,7 @@ class DwainsCardPicker extends LitElement {
   static properties = {
     hass: { attribute: false },
     lovelace: { attribute: false },
+    entityId: { attribute: false },
     _filter: { state: true },
     _manualType: { state: true },
     _selecting: { state: true },
@@ -232,7 +271,8 @@ class DwainsCardPicker extends LitElement {
     this._manualType = "";
     this._selecting = false;
     this._previewGeneration = 0;
-    this._initialConfigs = new Map();
+    this._previewConfigs = new Map();
+    this._selectionConfigs = new Map();
     this._previewObserver = undefined;
     this._pointerStart = undefined;
     this._pointerMoved = false;
@@ -333,7 +373,7 @@ class DwainsCardPicker extends LitElement {
         ? (window.customCards || []).find((entry) =>
           entry?.type === type || entry?.type === type.slice(7))
         : undefined;
-      const config = this._initialConfigs.get(type)
+      const config = this._previewConfigs.get(type)
         || (customCard?.preview
           ? await createInitialCardConfig(this.hass, type)
           : createPreviewConfig(this.hass, type));
@@ -343,7 +383,7 @@ class DwainsCardPicker extends LitElement {
         }
         return;
       }
-      this._initialConfigs.set(type, config);
+      this._previewConfigs.set(type, config);
       const helpers = await loadCardHelpers();
       const card = await helpers.createCardElement(cloneCardConfig(config));
       if (card?.tagName === "HUI-ERROR-CARD") {
@@ -377,9 +417,10 @@ class DwainsCardPicker extends LitElement {
     this._selecting = true;
     this._error = undefined;
     try {
-      const config = this._initialConfigs.get(type)
-        || await createInitialCardConfig(this.hass, type);
-      this._initialConfigs.set(type, config);
+      const selectionKey = `${this.entityId || ""}\u0000${type}`;
+      const config = this._selectionConfigs.get(selectionKey)
+        || await createInitialCardConfig(this.hass, type, this.entityId);
+      this._selectionConfigs.set(selectionKey, config);
       fireConfigChanged(this, config);
     } catch (error) {
       this._error = error instanceof Error ? error.message : String(error);
@@ -798,6 +839,7 @@ export {
   cardConfigSignature,
   cardTagName,
   cloneCardConfig,
+  applyEntityContext,
   createInitialCardConfig,
   createPreviewConfig,
   deepestActiveElement,
