@@ -508,6 +508,7 @@ class DwainsEditEntityPopupCard extends LitElement {
               @config-changed=${this.magicStuff}
               .hass=${this.hass}
               .lovelace=${{views: []}}
+              .entityId=${this.entity_id}
             ></dwains-card-picker>
             <div class="card-footer">
               <ha-button slot="secondaryAction" @click=${(e) => closePopup()}>

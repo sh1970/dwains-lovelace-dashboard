@@ -38,6 +38,7 @@ from .entity_commands import (
     ws_handle_remove_entity_popup,
     ws_handle_sort_entity,
 )
+from .event_commands import websocket_subscribe_dashboard_event
 from .more_page_commands import (
     websocket_get_more_page,
     websocket_get_more_pages,
@@ -54,6 +55,7 @@ WEBSOCKET_COMMANDS_REGISTERED_KEY = "dashboard_websocket_commands_registered"
 
 
 DASHBOARD_WEBSOCKET_COMMANDS = (
+    websocket_subscribe_dashboard_event,
     websocket_get_configuration,
     websocket_get_navigation,
     websocket_get_more_pages,

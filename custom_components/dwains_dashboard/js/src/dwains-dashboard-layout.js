@@ -1,7 +1,7 @@
 import { LitElement, html, css } from "lit";
 const { defineDwainsElement } = require('./custom-element-registration');
 const { LovelaceHeaderOwner } = require('./lovelace-header-owner');
-const VERSION = "3.10.0";
+const VERSION = "3.10.1";
 //Herschreven
 class DwainsDashboardLayout extends LitElement {
   constructor() {
